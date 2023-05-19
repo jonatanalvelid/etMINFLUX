@@ -1,2 +1,2 @@
 # etMINFLUX
-Event-triggered MINFLUX, with an ImSwitch-based software interacting with Imspector that is controlling an Abberior MINFLUX system.
+Event-triggered MINFLUX controller, written to interact with the Imspector software, in turn controlling a MINFLUX microscope also capable of running confocal imaging. 
