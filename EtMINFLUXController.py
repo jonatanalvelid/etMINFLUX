@@ -67,6 +67,7 @@ class EtMINFLUXController():
         self._widget.loadPipelineButton.clicked.connect(self.loadPipeline)
         self._widget.recordBinaryMaskButton.clicked.connect(self.initiateBinaryMask)
         self._widget.setBusyFalseButton.clicked.connect(self.setBusyFalse)
+        self._widget.setMFXROICalibrationButton.clicked.connect(self.setMFXROIButtonPosButtonCall)
 
         # initiate log for each detected event
         self.resetDetLog()
@@ -422,11 +423,13 @@ class EtMINFLUXController():
         """ Run event-triggered MINFLUX acquisition in small ROI. """
         self._imspector.run()
 
-    def setCenterScanParameter(self, position):
-        """ NOT USED: Set the scanning center from the detected event coordinates. """
-        # change the center coordinate of the scan parameters to the detected positions, in Imspector
-        self._imspector.value_at('ExpControl/scan/range/x/off', specpy.ValueTree.Measurement).set(position[0])
-        self._imspector.value_at('ExpControl/scan/range/y/off', specpy.ValueTree.Measurement).set(position[1])
+    def setMFXROIButtonPosButtonCall(self):
+        mouse.on_click(self.setMFXROIButtonPos)
+
+    def setMFXROIButtonPos(self):
+        mouse_pos = mouse.get_position()
+        self.__setMFXROI_button_pos = np.array(mouse_pos)
+        mouse.unhook_all()
 
     def saveValidationImages(self, prev=True, prev_ana=True):
         """ Save the validation fast images of an event detection, fast images and/or preprocessed analysis images. """
@@ -467,8 +470,8 @@ class EtCoordTransformHelper():
     def getCurrentMouseCoordsTopLeft(self):
         self._confTopLeftPosition = mouse.get_position()
         mouse.unhook_all()
-        self._widget.coordTransformWidget.conf_top_x_mon_edit.setText(str(self._confTopLeftPosition[0]))
-        self._widget.coordTransformWidget.conf_top_y_mon_edit.setText(str(self._confTopLeftPosition[0]))
+        self._widget.conf_top_x_mon_edit.setText(str(self._confTopLeftPosition[0]))
+        self._widget.conf_top_y_mon_edit.setText(str(self._confTopLeftPosition[1]))
 
     def getConfocalTopLeftPixel(self):
         mouse.on_click(self.getCurrentMouseCoordsTopLeft)
@@ -476,7 +479,7 @@ class EtCoordTransformHelper():
     def getCurrentMouseCoordsBottomRight(self):
         confBottomRightPosition = mouse.get_position()
         conf_size_px_mon = int(np.mean([np.abs(confBottomRightPosition[0]-self._confTopLeftPosition[0]), np.abs(confBottomRightPosition[1]-self._confTopLeftPosition[1])]))
-        self._widget.coordTransformWidget.conf_size_px_mon_edit.setText(str(conf_size_px_mon))
+        self._widget.conf_size_px_mon_edit.setText(str(conf_size_px_mon))
         mouse.unhook_all()
 
     def getConfocalBottomRightPixel(self):
@@ -493,11 +496,11 @@ class EtCoordTransformHelper():
     def calibrationFinish(self):
         """ Finish calibration. """
         # get coordinate transform parameter values from transform widget
-        self.__transformCoeffs[0] = int(self.etMINFLUXController._widget.conf_top_x_mon_edit.text())
-        self.__transformCoeffs[1] = int(self.etMINFLUXController._widget.conf_top_y_mon_edit.text())
-        self.__transformCoeffs[2] = int(self.etMINFLUXController._widget.conf_size_px_mon_edit.text())
-        self.__transformCoeffs[3] = int(self.etMINFLUXController._widget.conf_size_um_edit.text())
-        self.__transformCoeffs[4] = int(self.etMINFLUXController._widget.conf_size_px_edit.text())
+        self.__transformCoeffs[0] = int(self._widget.conf_top_x_mon_edit.text())
+        self.__transformCoeffs[1] = int(self._widget.conf_top_y_mon_edit.text())
+        self.__transformCoeffs[2] = int(self._widget.conf_size_px_mon_edit.text())
+        self.__transformCoeffs[3] = int(self._widget.conf_size_um_edit.text())
+        self.__transformCoeffs[4] = int(self._widget.conf_size_px_edit.text())
         # save coordinate transform parameters
         name = datetime.utcnow().strftime('%Hh%Mm')
         filename = os.path.join(self.__saveFolder, name) + '_transformParams.txt'

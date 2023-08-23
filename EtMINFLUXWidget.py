@@ -37,6 +37,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton = QtWidgets.QPushButton('Initiate etMINFLUX')
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = QtWidgets.QPushButton('Load pipeline')
+        self.setMFXROICalibrationButton = QtWidgets.QPushButton('MINFLUX ROI button calibration')
         # create buttons for calibrating coordinate transform, recording binary mask, loading scan params
         self.coordTransfCalibButton = QtWidgets.QPushButton('Transform calibration')
         self.recordBinaryMaskButton = QtWidgets.QPushButton('Record binary mask')
@@ -126,7 +127,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.mfx_exc_laser_par, currentRow, 3)
 
         currentRow +=1 
-
+        self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 2)
         self.grid.addWidget(self.setBusyFalseButton, currentRow, 3)
 
     def initParamFields(self, parameters: dict, params_exclude: list):
