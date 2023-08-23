@@ -1,8 +1,6 @@
 import os
 
-import napari
 import pyqtgraph as pg
-from napari.utils.translations import trans
 from PyQt5 import QtWidgets, QtCore
 
 
@@ -232,87 +230,68 @@ class CoordTransformWidget(QtWidgets.QWidget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.loadLoResButton = QtWidgets.QPushButton('Load low-res calibration image')
-        self.loadHiResButton = QtWidgets.QPushButton('Load high-res calibration image')
         self.saveCalibButton = QtWidgets.QPushButton('Save calibration')
-        self.resetCoordsButton = QtWidgets.QPushButton('Reset coordinates')
 
-        self.napariViewerLo = EmbeddedNapari()
-        self.napariViewerHi = EmbeddedNapari()
-
-        # add points layers to the viewer
-        self.pointsLayerLo = self.napariViewerLo.add_points(name="lo_points", symbol='ring', size=20, face_color='green', edge_color='green')
-        self.pointsLayerTransf = self.napariViewerHi.add_points(name="transf_points", symbol='cross', size=20, face_color='red', edge_color='red')
-        self.pointsLayerHi = self.napariViewerHi.add_points(name="hi_points", symbol='ring', size=20, face_color='green', edge_color='green')
-        
+        # Create editable fields for calibration parameters
+        self.conf_top_x_mon_label = QtWidgets.QLabel('Confocal top left pixel - x (monitor)')
+        self.conf_top_x_mon_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.conf_top_x_mon_edit = QtWidgets.QLineEdit(str(0))
+        self.conf_top_left_mon_button = QtWidgets.QPushButton('Click detect: confocal top left pixel')
+        self.conf_top_y_mon_label = QtWidgets.QLabel('Confocal top left pixel - y (monitor)')
+        self.conf_top_y_mon_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.conf_top_y_mon_edit = QtWidgets.QLineEdit(str(0))
+        self.conf_size_px_mon_label = QtWidgets.QLabel('Confocal image size in pixels (monitor)')
+        self.conf_size_px_mon_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.conf_size_px_mon_edit = QtWidgets.QLineEdit(str(0))
+        self.conf_bottom_right_mon_button = QtWidgets.QPushButton('Click detect: confocal bottom right pixel')
+        self.conf_size_um_label = QtWidgets.QLabel('Confocal image size (µm)')
+        self.conf_size_um_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.conf_size_um_edit = QtWidgets.QLineEdit(str(0))
+        self.conf_size_px_label = QtWidgets.QLabel('Confocal image size (px)')
+        self.conf_size_px_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.conf_size_px_edit = QtWidgets.QLineEdit(str(0))
 
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
     
         currentRow = 0
-        self.grid.addWidget(self.loadLoResButton, currentRow, 0)
-        self.grid.addWidget(self.loadHiResButton, currentRow, 1)
+        self.grid.addWidget(self.conf_top_x_mon_label, currentRow, 0)
+        self.grid.addWidget(self.conf_top_x_mon_edit, currentRow, 1)
+        self.grid.addWidget(self.conf_top_left_mon_button, currentRow, 2)
+
+        currentRow += 1
+        self.grid.addWidget(self.conf_top_y_mon_label, currentRow, 0)
+        self.grid.addWidget(self.conf_top_y_mon_edit, currentRow, 1)
         
         currentRow += 1
-        self.grid.addWidget(self.napariViewerLo.get_widget(), currentRow, 0)
-        self.grid.addWidget(self.napariViewerHi.get_widget(), currentRow, 1)
+        self.grid.addWidget(self.conf_size_px_mon_label, currentRow, 0)
+        self.grid.addWidget(self.conf_size_px_mon_edit, currentRow, 1)
+        self.grid.addWidget(self.conf_bottom_right_mon_button, currentRow, 2)
+
+        currentRow += 1
+        self.grid.addWidget(self.conf_size_um_label, currentRow, 0)
+        self.grid.addWidget(self.conf_size_um_edit, currentRow, 1)
+
+        currentRow += 1
+        self.grid.addWidget(self.conf_size_px_label, currentRow, 0)
+        self.grid.addWidget(self.conf_size_px_edit, currentRow, 1)
 
         currentRow += 1
         self.grid.addWidget(self.saveCalibButton, currentRow, 0)
-        self.grid.addWidget(self.resetCoordsButton, currentRow, 1)
+        
 
-
-class EmbeddedNapari(napari.Viewer):
-    """ Napari viewer to be embedded in non-napari windows. Also includes a
-    feature to protect certain layers from being removed when added using
-    the add_image method. Copied from ImSwitch (github.com/kasasxav/ImSwitch).
-    """
-
-    def __init__(self, *args, show=False, **kwargs):
-        super().__init__(*args, show=show, **kwargs)
-
-        # Monkeypatch layer removal methods
-        oldDelitemIndices = self.layers._delitem_indices
-
-        def newDelitemIndices(key):
-            indices = oldDelitemIndices(key)
-            for index in indices[:]:
-                layer = index[0][index[1]]
-                if hasattr(layer, 'protected') and layer.protected:
-                    indices.remove(index)
-            return indices
-
-        self.layers._delitem_indices = newDelitemIndices
-
-        # Make menu bar not native
-        self.window._qt_window.menuBar().setNativeMenuBar(False)
-
-        # Remove unwanted menu bar items
-        menuChildren = self.window._qt_window.findChildren(QtWidgets.QAction)
-        for menuChild in menuChildren:
-            try:
-                if menuChild.text() in [trans._('Close Window'), trans._('Exit')]:
-                    self.window.file_menu.removeAction(menuChild)
-            except Exception:
-                pass
-
-    def add_image(self, *args, protected=False, **kwargs):
-        result = super().add_image(*args, **kwargs)
-
-        if isinstance(result, list):
-            for layer in result:
-                layer.protected = protected
-        else:
-            result.protected = protected
-        return result
-
-    def get_widget(self):
-        return self.window._qt_window
-
-    def addItem(self, item):
-        item.attach(self,
-                    canvas=self.window.qt_viewer.canvas,
-                    view=self.window.qt_viewer.view,
-                    parent=self.window.qt_viewer.view.scene,
-                    order=1e6 + 8000)
+# Copyright (C) 2023-2023 Jonatan Alvelid
+#
+# EtMINFLUX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# ImSwitch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.

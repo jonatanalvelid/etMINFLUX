@@ -461,7 +461,26 @@ class EtCoordTransformHelper():
         # connect signals from widget
         etMINFLUXController._widget.coordTransfCalibButton.clicked.connect(self.calibrationLaunch)
         self._widget.saveCalibButton.clicked.connect(self.calibrationFinish)
-        self._widget.resetCoordsButton.clicked.connect(self.resetCalibrationCoords)
+        self._widget.conf_top_left_mon_button.clicked.connect(self.getConfocalTopLeftPixel)
+        self._widget.conf_bottom_right_mon_button.clicked.connect(self.getConfocalBottomRightPixel)
+
+    def getCurrentMouseCoordsTopLeft(self):
+        self._confTopLeftPosition = mouse.get_position()
+        mouse.unhook_all()
+        self._widget.coordTransformWidget.conf_top_x_mon_edit.setText(str(self._confTopLeftPosition[0]))
+        self._widget.coordTransformWidget.conf_top_y_mon_edit.setText(str(self._confTopLeftPosition[0]))
+
+    def getConfocalTopLeftPixel(self):
+        mouse.on_click(self.getCurrentMouseCoordsTopLeft)
+
+    def getCurrentMouseCoordsBottomRight(self):
+        confBottomRightPosition = mouse.get_position()
+        conf_size_px_mon = int(np.mean([np.abs(confBottomRightPosition[0]-self._confTopLeftPosition[0]), np.abs(confBottomRightPosition[1]-self._confTopLeftPosition[1])]))
+        self._widget.coordTransformWidget.conf_size_px_mon_edit.setText(str(conf_size_px_mon))
+        mouse.unhook_all()
+
+    def getConfocalBottomRightPixel(self):
+        mouse.on_click(self.getCurrentMouseCoordsBottomRight)
 
     def getTransformCoeffs(self):
         """ Get transformation coefficients. """
@@ -473,9 +492,15 @@ class EtCoordTransformHelper():
 
     def calibrationFinish(self):
         """ Finish calibration. """
-        # calibrate coordinate transform
-        name = datetime.utcnow().strftime('%Hh%Mm%Ss%fus')
-        filename = os.path.join(self.__saveFolder, name) + '_transformCoeffs.txt'
+        # get coordinate transform parameter values from transform widget
+        self.__transformCoeffs[0] = int(self.etMINFLUXController._widget.conf_top_x_mon_edit.text())
+        self.__transformCoeffs[1] = int(self.etMINFLUXController._widget.conf_top_y_mon_edit.text())
+        self.__transformCoeffs[2] = int(self.etMINFLUXController._widget.conf_size_px_mon_edit.text())
+        self.__transformCoeffs[3] = int(self.etMINFLUXController._widget.conf_size_um_edit.text())
+        self.__transformCoeffs[4] = int(self.etMINFLUXController._widget.conf_size_px_edit.text())
+        # save coordinate transform parameters
+        name = datetime.utcnow().strftime('%Hh%Mm')
+        filename = os.path.join(self.__saveFolder, name) + '_transformParams.txt'
         np.savetxt(fname=filename, X=self.__transformCoeffs)
 
 
@@ -563,9 +588,9 @@ class ValueAt():
         pass
 
 
-# Copyright (C) 2020-2022 ImSwitch developers
+# Copyright (C) 2023-2023 Jonatan Alvelid
 #
-# ImSwitch is free software: you can redistribute it and/or modify
+# EtMINFLUX is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
@@ -576,4 +601,4 @@ class ValueAt():
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
