@@ -446,7 +446,7 @@ class EtMINFLUXController():
         """ Pause the fast method, when an event has been detected. """
         if self.__running:
             # TODO: disconnect signal from update of image to running pipeline 
-            xxx.sigUpdateImage.disconnect(self.runPipeline)
+            #xxx.sigUpdateImage.disconnect(self.runPipeline)
             self.__running = False
 
 
