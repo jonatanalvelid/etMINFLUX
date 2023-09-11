@@ -17,8 +17,8 @@ from scipy.optimize import least_squares
 
 warnings.filterwarnings("ignore")
 
-# TODO: change this to preferred path for saved logs
-_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs_etminflux')
+_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
+_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
 class EtMINFLUXController():
     """ Linked to EtMINFLUXWidget."""
@@ -52,7 +52,7 @@ class EtMINFLUXController():
         self._widget.setTriggerModalityList(self.triggerModalityList)
 
         # list of minflux sequences that can be triggered
-        self.mfxSeqList = ['Imaging2D', 'Imaging3D', 'Tracking2D', 'Tracking3D']
+        self.mfxSeqList = ['Imaging2D', 'Imaging3D', 'Tracking2D', 'Tracking3D']  # make sure that these options matches exactly thos in Imspector
         self._widget.setMfxSequenceList(self.mfxSeqList)
 
         # list of available lasers for MFX imaging, get this list manually from Imspector control software
@@ -60,7 +60,7 @@ class EtMINFLUXController():
         self._widget.setMinfluxExcLaserList(self.mfxExcLaserList)
 
         # create a helper controller for the coordinate transform pop-out widget
-        self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget, _logsDir)
+        self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget, _transformsDir)
 
         # Connect EtMINFLUXWidget and communication channel signals
         self._widget.initiateButton.clicked.connect(self.initiate)
@@ -302,7 +302,7 @@ class EtMINFLUXController():
         if not self.__busy:
             # get image
             meas = self._imspector.active_measurement()
-            img = meas.stack(0).data()[np.mod(self.__fast_frame, self.__prev_frames_len)]  # TODO NEED TO FIGURE OUT WHICH STACK TO TAKE - ALL STACKS IN A TEMPLATE (I.E. ALL WINDOWS) ARE JUST IN A STACK LIKE THIS
+            img = np.squeeze(meas.stack(0).data()[np.mod(self.__fast_frame, self.__prev_frames_len)])  # TODO NEED TO FIGURE OUT WHICH STACK TO TAKE - ALL STACKS IN A TEMPLATE (I.E. ALL CHANNELS IN ALL WINDOWS) ARE SEEMINGLY RANDOMLY ORDERED
             # if not still running pipeline on last frame
             self.__busy = True
             # log start of pipeline
@@ -406,8 +406,14 @@ class EtMINFLUXController():
             self.setBusyFalse()
 
     def initiateMFX(self, position=[0.0,0.0], ROI_size=[1.0,1.0]):
-        """ Initiate a MINFLUX scan, by setting a MFX ROI. """
+        """ Prepare a MINFLUX scan at the defined position. """
+        self.setMFXSequence(self.mfx_seq)
+        ROI_size = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
         self.setMINFLUXROI(position, ROI_size)
+
+    def setMFXSequence(self, mfx_seq):
+        """ Sets MINFLUX sequence, according to the GUI choice of the user. """
+        self._imspector.value_at('Minflux\sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
 
     def setMINFLUXROI(self, position, ROI_size):
         """ Set the MINFLUX ROI by mouse control: drag ROI, and click "Set as MFX ROI"-button"""
@@ -460,12 +466,16 @@ class EtCoordTransformHelper():
 
         # initiate coordinate transform parameters
         self.__transformCoeffs = [591,149,788,80,800]
+        self.__calibNameSuffix = '_transformParams.txt'
 
         # connect signals from widget
-        etMINFLUXController._widget.coordTransfCalibButton.clicked.connect(self.calibrationLaunch)
+        self.etMINFLUXController._widget.coordTransfCalibButton.clicked.connect(self.calibrationLaunch)
         self._widget.saveCalibButton.clicked.connect(self.calibrationFinish)
+        self._widget.loadCalibButton.clicked.connect(self.calibrationLoad)
         self._widget.conf_top_left_mon_button.clicked.connect(self.getConfocalTopLeftPixel)
         self._widget.conf_bottom_right_mon_button.clicked.connect(self.getConfocalBottomRightPixel)
+
+        self._widget.setCalibrationList(self.__saveFolder)
 
     def getCurrentMouseCoordsTopLeft(self):
         self._confTopLeftPosition = mouse.get_position()
@@ -499,12 +509,29 @@ class EtCoordTransformHelper():
         self.__transformCoeffs[0] = int(self._widget.conf_top_x_mon_edit.text())
         self.__transformCoeffs[1] = int(self._widget.conf_top_y_mon_edit.text())
         self.__transformCoeffs[2] = int(self._widget.conf_size_px_mon_edit.text())
-        self.__transformCoeffs[3] = int(self._widget.conf_size_um_edit.text())
+        self.__transformCoeffs[3] = float(self._widget.conf_size_um_edit.text())
         self.__transformCoeffs[4] = int(self._widget.conf_size_px_edit.text())
         # save coordinate transform parameters
-        name = datetime.utcnow().strftime('%Hh%Mm')
-        filename = os.path.join(self.__saveFolder, name) + '_transformParams.txt'
+        name = datetime.utcnow().strftime('%y%m%d-%Hh%Mm')
+        filename = os.path.join(self.__saveFolder, name) + self.__calibNameSuffix
         np.savetxt(fname=filename, X=self.__transformCoeffs)
+
+    def calibrationLoad(self):
+        """ Load a previously saved transformation calibration. """
+        calibNameIdx = self._widget.transformCalibrationsPar.currentIndex()
+        calibName = self._widget.transformCalibrations[calibNameIdx]
+        filename = os.path.join(self.__saveFolder, calibName) + self.__calibNameSuffix
+        params = np.loadtxt(fname=filename, dtype=float, delimiter='\t')
+        self._widget.conf_top_x_mon_edit.setText(str(int(params[0])))
+        self._widget.conf_top_y_mon_edit.setText(str(int(params[1])))
+        self._widget.conf_size_px_mon_edit.setText(str(int(params[2])))
+        self._widget.conf_size_um_edit.setText(str(params[3]))
+        self._widget.conf_size_px_edit.setText(str(int(params[4])))
+        self.__transformCoeffs[0] = int(params[0])
+        self.__transformCoeffs[1] = int(params[1])
+        self.__transformCoeffs[2] = int(params[2])
+        self.__transformCoeffs[3] = float(params[3])
+        self.__transformCoeffs[4] = int(params[4])
 
 
 class RunMode(enum.Enum):

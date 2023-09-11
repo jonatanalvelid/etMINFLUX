@@ -126,7 +126,18 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.mfx_exc_laser_label, currentRow, 2)
         self.grid.addWidget(self.mfx_exc_laser_par, currentRow, 3)
 
+        currentRow += 1
+
+        self.grid.addWidget(self.size_x_label, currentRow, 2)
+        self.grid.addWidget(self.size_x_edit, currentRow, 3)
+
+        currentRow += 1
+
+        self.grid.addWidget(self.size_y_label, currentRow, 2)
+        self.grid.addWidget(self.size_y_edit, currentRow, 3)
+
         currentRow +=1 
+
         self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 2)
         self.grid.addWidget(self.setBusyFalseButton, currentRow, 3)
 
@@ -232,6 +243,13 @@ class CoordTransformWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.saveCalibButton = QtWidgets.QPushButton('Save calibration')
+        self.loadCalibButton = QtWidgets.QPushButton('Load calibration')
+
+        # add all previous transforms in folder to be loaded
+        self.transformCalibrations = list()
+        self.transformCalibrationsPar = QtWidgets.QComboBox()
+        self.transformCalibrationsPar_label = QtWidgets.QLabel('Experiment mode')
+        self.transformCalibrationsPar_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
         # Create editable fields for calibration parameters
         self.conf_top_x_mon_label = QtWidgets.QLabel('Confocal top left pixel - x (monitor)')
@@ -241,14 +259,14 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.conf_top_y_mon_label = QtWidgets.QLabel('Confocal top left pixel - y (monitor)')
         self.conf_top_y_mon_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.conf_top_y_mon_edit = QtWidgets.QLineEdit(str(0))
-        self.conf_size_px_mon_label = QtWidgets.QLabel('Confocal image size in pixels (monitor)')
+        self.conf_size_px_mon_label = QtWidgets.QLabel('Confocal image size, monitor (pixels)')
         self.conf_size_px_mon_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.conf_size_px_mon_edit = QtWidgets.QLineEdit(str(0))
         self.conf_bottom_right_mon_button = QtWidgets.QPushButton('Click detect: confocal bottom right pixel')
-        self.conf_size_um_label = QtWidgets.QLabel('Confocal image size (µm)')
+        self.conf_size_um_label = QtWidgets.QLabel('Confocal image size, scan (µm)')
         self.conf_size_um_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.conf_size_um_edit = QtWidgets.QLineEdit(str(0))
-        self.conf_size_px_label = QtWidgets.QLabel('Confocal image size (px)')
+        self.conf_size_px_label = QtWidgets.QLabel('Confocal image size, scan (px)')
         self.conf_size_px_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.conf_size_px_edit = QtWidgets.QLineEdit(str(0))
 
@@ -257,6 +275,11 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.setLayout(self.grid)
     
         currentRow = 0
+        self.grid.addWidget(self.transformCalibrationsPar_label, currentRow, 0)
+        self.grid.addWidget(self.transformCalibrationsPar, currentRow, 1)
+        self.grid.addWidget(self.loadCalibButton, currentRow, 2)
+
+        currentRow += 1
         self.grid.addWidget(self.conf_top_x_mon_label, currentRow, 0)
         self.grid.addWidget(self.conf_top_x_mon_edit, currentRow, 1)
         self.grid.addWidget(self.conf_top_left_mon_button, currentRow, 2)
@@ -280,7 +303,16 @@ class CoordTransformWidget(QtWidgets.QWidget):
 
         currentRow += 1
         self.grid.addWidget(self.saveCalibButton, currentRow, 0)
-        
+
+    def setCalibrationList(self, calibrationsDir):
+        """ Set combobox with available coordinate transformations to use. """
+        for transform in os.listdir(calibrationsDir):
+            if os.path.isfile(os.path.join(calibrationsDir, transform)):
+                transform = transform.split('.')[0].split('_')[0]
+                self.transformCalibrations.append(transform)
+        self.transformCalibrationsPar.addItems(self.transformCalibrations)
+        self.transformCalibrationsPar.setCurrentIndex(0)        
+
 
 # Copyright (C) 2023-2023 Jonatan Alvelid
 #
