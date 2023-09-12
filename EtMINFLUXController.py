@@ -17,6 +17,8 @@ from scipy.optimize import least_squares
 
 warnings.filterwarnings("ignore")
 
+#_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
+#_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
 _logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
 _transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
@@ -31,8 +33,10 @@ class EtMINFLUXController():
         # open imspector connection
         try:
             self._imspector = specpy.get_application()
+            print('Imspector connected succesfully')
         except:
             self._imspector = ImspectorMock()
+            print('Load mock Imspector connection')
 
         # folders for analysis pipelines and transformations
         self.analysisDir = os.path.join('analysis_pipelines')
@@ -137,24 +141,34 @@ class EtMINFLUXController():
             # load selected coordinate transform
             self.loadTransform()
             self.__transformCoeffs = self.__coordTransformHelper.getTransformCoeffs()
+            self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0]
+            self.__confocalLineCurr = 0
             # start confocal imaging loop (in it's own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
-            self._imspector.connect_end(self.runPipeline, 1) # connect Imspector confocal image frame finished to running pipeline
+            self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
             # TODO: connect signal from end of MINFLUX measurement to scanEnded() TODO DO THIS LATER, WHEN MINFLUX IMAGING IS ACTUALLY STARTING, OR DO IT DIRECTLY PROGRAMMATICALLY AS THE IMAGING HAS TO BE STOPPED FROM HERE
             self.startConfocalScanning()
             self._widget.initiateButton.setText('Stop')
             self.__running = True
         else:
             # disconnect signals and turn off fast laser
-            self._imspector.disconnect_end(self.runPipeline, 1) # disconnect Imspector confocal image frame finished to running pipeline
+            self._imspector.disconnect_end(self.imspectorLineEvent, 1) # disconnect Imspector confocal image frame finished to running pipeline
             # TODO: disconnect signal from end of MINFLUX measurement to scanEnded()  TODO DO THIS LATER, WHEN MINFLUX IMAGING IS ACTUALLY STARTING, OR DO IT DIRECTLY PROGRAMMATICALLY AS THE IMAGING HAS TO BE STOPPED FROM HERE
             # TODO: stop Imspector confocal imaging
             self._widget.initiateButton.setText('Initiate')
             self.resetPipelineParamVals()
             self.resetRunParams()
 
+    def imspectorLineEvent(self):
+        self.__confocalLineCurr += 1
+        if self.__confocalLineCurr == self.__confocalLinesFrame:
+            self.__confocalLineCurr = 0
+            self.runPipeline()
+
     def startConfocalScanning(self):
         # TODO: set repeat measurement - mouse control?
-        self._imspector.start()  # TODO: potentially use a.run() instead, to return data at finish, instead of connecting scan finish to runPipeline? But then it has to be in a separate thread.
+        #self._imspector.start()  # TODO: potentially use a.run() instead, to return data at finish, instead of connecting scan finish to runPipeline? But then it has to be in a separate thread.
+        mouse.move(398, 67)
+        mouse.click()
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
@@ -275,7 +289,7 @@ class EtMINFLUXController():
         """ Read user-provided analysis pipeline parameter values. """
         param_vals = list()
         for item in self._widget.param_edits:
-            param_vals.append(np.float(item.text()))
+            param_vals.append(float(item.text()))
         return param_vals
 
     def launchHelpWidget(self):
@@ -299,11 +313,13 @@ class EtMINFLUXController():
 
     def runPipeline(self):
         """ Run the analyis pipeline, called after every fast method frame. """
+        print("running pipeline")
         if not self.__busy:
             # get image
             meas = self._imspector.active_measurement()
             img = np.squeeze(meas.stack(0).data()[np.mod(self.__fast_frame, self.__prev_frames_len)])  # TODO NEED TO FIGURE OUT WHICH STACK TO TAKE - ALL STACKS IN A TEMPLATE (I.E. ALL CHANNELS IN ALL WINDOWS) ARE SEEMINGLY RANDOMLY ORDERED
             # if not still running pipeline on last frame
+            print(np.shape(img))
             self.__busy = True
             # log start of pipeline
             self.setDetLogLine("pipeline_start", datetime.now().strftime('%Ss%fus'))
@@ -322,6 +338,7 @@ class EtMINFLUXController():
                                                                self.__exinfo, *self.__pipeline_param_vals)
             self.setDetLogLine("pipeline_end", datetime.now().strftime('%Ss%fus'))
 
+            print(self.__fast_frame)
             if self.__fast_frame > self.__init_frames:
                 # if initial settling frames have passed
                 if self.__runMode == RunMode.TestVisualize:
@@ -404,6 +421,7 @@ class EtMINFLUXController():
             self.__fast_frame += 1
             # unset busy flag
             self.setBusyFalse()
+            print('finished runPipeline')
 
     def initiateMFX(self, position=[0.0,0.0], ROI_size=[1.0,1.0]):
         """ Prepare a MINFLUX scan at the defined position. """

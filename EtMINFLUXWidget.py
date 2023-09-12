@@ -248,7 +248,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
         # add all previous transforms in folder to be loaded
         self.transformCalibrations = list()
         self.transformCalibrationsPar = QtWidgets.QComboBox()
-        self.transformCalibrationsPar_label = QtWidgets.QLabel('Experiment mode')
+        self.transformCalibrationsPar_label = QtWidgets.QLabel('Transform calibration')
         self.transformCalibrationsPar_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
         # Create editable fields for calibration parameters
