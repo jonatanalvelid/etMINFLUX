@@ -45,6 +45,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.setBusyFalseButton = QtWidgets.QPushButton('Unlock softlock')
         # create check box for endless running mode
         self.endlessScanCheck = QtWidgets.QCheckBox('Endless')
+        # create check box for scan all detected ROIs
+        self.triggerAllROIsCheck = QtWidgets.QCheckBox('Trigger all ROIs')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold')
         self.bin_thresh_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
@@ -63,12 +65,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_exc_laser_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.mfx_exc_laser = list()
         self.mfx_exc_laser_par = QtWidgets.QComboBox()
-        self.mfx_exc_pwr_label = QtWidgets.QLabel('MFX exc power (%)')
-        self.mfx_exc_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.mfx_exc_pwr_edit = QtWidgets.QLineEdit(str(5))
-        self.mfx_act_pwr_label = QtWidgets.QLabel('MFX act power (%)')
-        self.mfx_act_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.mfx_act_pwr_edit = QtWidgets.QLineEdit(str(0))
         self.mfx_seq_label = QtWidgets.QLabel('MFX sequence')
         self.mfx_seq_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.mfx_seq = list()
@@ -78,6 +74,15 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
         self.analysisHelpWidget = AnalysisWidget(*args, **kwargs)
+
+        ### Unused parameters ###
+        self.mfx_exc_pwr_label = QtWidgets.QLabel('MFX exc power (%)')
+        self.mfx_exc_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_exc_pwr_edit = QtWidgets.QLineEdit(str(5))
+        self.mfx_act_pwr_label = QtWidgets.QLabel('MFX act power (%)')
+        self.mfx_act_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_act_pwr_edit = QtWidgets.QLineEdit(str(0))
+        #########################
 
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
@@ -123,11 +128,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
         currentRow += 1
 
-        self.grid.addWidget(self.mfx_exc_laser_label, currentRow, 2)
-        self.grid.addWidget(self.mfx_exc_laser_par, currentRow, 3)
-
-        currentRow += 1
-
         self.grid.addWidget(self.size_x_label, currentRow, 2)
         self.grid.addWidget(self.size_x_edit, currentRow, 3)
 
@@ -140,6 +140,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
         self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 2)
         self.grid.addWidget(self.setBusyFalseButton, currentRow, 3)
+
+        currentRow +=1
+
+        self.grid.addWidget(self.triggerAllROIsCheck, currentRow, 3)
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """

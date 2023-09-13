@@ -93,7 +93,7 @@ class EtMINFLUXController():
         self.__prevAnaFrames = deque(maxlen=10)  # deque for previous preprocessed analysis frames
         self.__binary_mask = None  # binary mask of regions of interest, used by certain pipelines, leave None to consider the whole image
         self.__binary_frames = 10  # number of frames to use for calculating binary mask 
-        self.__init_frames = 5  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
+        self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
         self.__validation_frames = 5  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode']  # excluded pipeline parameters when loading param fields
         self.__run_all_aoi = False  # run all detected events/area flag
@@ -111,12 +111,15 @@ class EtMINFLUXController():
             # read mfx sequence and laser from GUI
             sequenceIdx = self._widget.mfx_seq_par.currentIndex()
             self.mfx_seq = self._widget.mfx_seqs[sequenceIdx]
-            laserIdx = self._widget.mfx_exc_laser_par.currentIndex()
-            self.mfx_exc_laser = self._widget.mfx_exc_lasers[laserIdx]
+            #laserIdx = self._widget.mfx_exc_laser_par.currentIndex()
+            #self.mfx_exc_laser = self._widget.mfx_exc_lasers[laserIdx]
 
             # read trigger modality type from GUI
             modalityIdx = self._widget.triggerModalityPar.currentIndex()
             self.fast_modality = self._widget.triggerModalities[modalityIdx]
+
+            # read param for using all ROIs
+            self.__run_all_aoi = self._widget.triggerAllROIsCheck.isChecked()
 
             # Read params for analysis pipeline from GUI
             self.__pipeline_param_vals = self.readPipelineParams()
@@ -552,12 +555,6 @@ class EtCoordTransformHelper():
         self.__transformCoeffs[4] = int(params[4])
 
 
-class RunMode(enum.Enum):
-    Experiment = 1
-    TestVisualize = 2
-    TestValidate = 3
-
-
 def insertSuffix(filename, suffix, newExt=None):
     names = os.path.splitext(filename)
     if newExt is None:
@@ -575,6 +572,12 @@ def getUniqueName(name):
             name = insertSuffix(name, '_{}'.format(n))
         n += 1
     return ''.join((name, ext))
+
+
+class RunMode(enum.Enum):
+    Experiment = 1
+    TestVisualize = 2
+    TestValidate = 3
 
 
 class ImspectorMock():
