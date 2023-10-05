@@ -93,8 +93,8 @@ class EtMINFLUXController():
         self.__prevAnaFrames = deque(maxlen=10)  # deque for previous preprocessed analysis frames
         self.__binary_mask = None  # binary mask of regions of interest, used by certain pipelines, leave None to consider the whole image
         self.__binary_frames = 10  # number of frames to use for calculating binary mask 
-        self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
-        self.__validation_frames = 5  # number of fast frames to record after detecting an event in validation mode
+        self.__init_frames = 1  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
+        self.__validation_frames = 3  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode']  # excluded pipeline parameters when loading param fields
         self.__run_all_aoi = False  # run all detected events/area flag
         self.__areas_of_interest = list()  # list of detected events/areas center coordinates, to go through after pipeline run
@@ -104,6 +104,7 @@ class EtMINFLUXController():
         # initiate and set parameters for automatic mouse control
         self.__mouse_drag_duration = 0.025
         self.__setMFXROI_button_pos = [200,100]
+        self.__set_repeat_meas_button_pos = [398,67]
 
     def initiate(self):
         """ Initiate or stop an etMINFLUX experiment. """
@@ -145,8 +146,10 @@ class EtMINFLUXController():
             self.loadTransform()
             self.__transformCoeffs = self.__coordTransformHelper.getTransformCoeffs()
             self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0]
+            self.__prev_frames_len = self._imspector.active_measurement().stack(0).sizes()[1]  #TODO: Check that this is the correct number
+            print(f'Prev frames len: {self.__prev_frames_len}')
             self.__confocalLineCurr = 0
-            # start confocal imaging loop (in it's own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
+            # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
             self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
             # TODO: connect signal from end of MINFLUX measurement to scanEnded() TODO DO THIS LATER, WHEN MINFLUX IMAGING IS ACTUALLY STARTING, OR DO IT DIRECTLY PROGRAMMATICALLY AS THE IMAGING HAS TO BE STOPPED FROM HERE
             self.startConfocalScanning()
@@ -168,10 +171,11 @@ class EtMINFLUXController():
             self.runPipeline()
 
     def startConfocalScanning(self):
-        # TODO: set repeat measurement - mouse control?
-        #self._imspector.start()  # TODO: potentially use a.run() instead, to return data at finish, instead of connecting scan finish to runPipeline? But then it has to be in a separate thread.
-        mouse.move(398, 67)
+        # set repeat measurement
+        mouse.move(*self.__set_repeat_meas_button_pos)
         mouse.click()
+        # start scan
+        self._imspector.start()
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
@@ -318,10 +322,10 @@ class EtMINFLUXController():
         """ Run the analyis pipeline, called after every fast method frame. """
         print("running pipeline")
         if not self.__busy:
+            # if not still running pipeline on last frame
             # get image
             meas = self._imspector.active_measurement()
             img = np.squeeze(meas.stack(0).data()[np.mod(self.__fast_frame, self.__prev_frames_len)])  # TODO NEED TO FIGURE OUT WHICH STACK TO TAKE - ALL STACKS IN A TEMPLATE (I.E. ALL CHANNELS IN ALL WINDOWS) ARE SEEMINGLY RANDOMLY ORDERED
-            # if not still running pipeline on last frame
             print(np.shape(img))
             self.__busy = True
             # log start of pipeline
@@ -400,11 +404,7 @@ class EtMINFLUXController():
                     # transform detected coordinate between from pixels to sample position in um (for conf --> MFX)
                     coords_center_scan, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
                     # log detected and scanning center coordinate
-                    self.setDetLogLine("x_center_px", coords_scan[0])
-                    self.setDetLogLine("y_center_px", coords_scan[1])
-                    self.setDetLogLine("x_center_um", coords_center_scan[0])
-                    self.setDetLogLine("y_center_um", coords_center_scan[1])
-                    self.setDetLogLine("scan_initiate", datetime.now().strftime('%Ss%fus'))
+                    self.logCoordinates(coords_scan, coords_center_scan)
                     # initiate and run scanning with transformed center coordinate
                     self.initiateMFX(position=coords_center_scan)
                     self.runMFX()
@@ -425,6 +425,14 @@ class EtMINFLUXController():
             # unset busy flag
             self.setBusyFalse()
             print('finished runPipeline')
+
+    def logCoordinates(self, coords_scan, coords_center_scan):
+        """ Log detection and scan coordinates. """
+        self.setDetLogLine("x_center_px", coords_scan[0])
+        self.setDetLogLine("y_center_px", coords_scan[1])
+        self.setDetLogLine("x_center_um", coords_center_scan[0])
+        self.setDetLogLine("y_center_um", coords_center_scan[1])
+        self.setDetLogLine("scan_initiate", datetime.now().strftime('%Ss%fus'))
 
     def initiateMFX(self, position=[0.0,0.0], ROI_size=[1.0,1.0]):
         """ Prepare a MINFLUX scan at the defined position. """
@@ -448,7 +456,7 @@ class EtMINFLUXController():
 
     def runMFX(self):
         """ Run event-triggered MINFLUX acquisition in small ROI. """
-        self._imspector.run()
+        self._imspector.start()
 
     def setMFXROIButtonPosButtonCall(self):
         mouse.on_click(self.setMFXROIButtonPos)
@@ -458,23 +466,30 @@ class EtMINFLUXController():
         self.__setMFXROI_button_pos = np.array(mouse_pos)
         mouse.unhook_all()
 
+    def stopMFX(self):
+        """ Stop MINFLUX measurement. """
+        self._imspector.pause()
+
     def saveValidationImages(self, prev=True, prev_ana=True):
         """ Save the validation fast images of an event detection, fast images and/or preprocessed analysis images. """
         if prev:
+            print(f'Length of prev frames: {len(self.__prevFrames)}')
             # TODO: save detectorFast frames leading up to event
             # #xxx.sigSaveImage.emit(self.detectorFast, np.array(list(self.__prevFrames)))  # (detector, imagestack)
             self.__prevFrames.clear()
+            print(f'Length of prev frames: {len(self.__prevFrames)}')
         if prev_ana:
+            print(f'Length of prev_ana frames: {len(self.__prevAnaFrames)}')
             # TODO: save preprocessed detectorFast frames leading up to event
             # #xxx.sigSaveImage.emit(self.detectorFast, np.array(list(self.__prevAnaFrames)))  # (detector, imagestack)
             self.__prevAnaFrames.clear()
+            print(f'Length of prev_ana frames: {len(self.__prevAnaFrames)}')
 
     def pauseFastModality(self):
         """ Pause the fast method, when an event has been detected. """
         if self.__running:
-            # TODO: disconnect signal from update of image to running pipeline 
-            #xxx.sigUpdateImage.disconnect(self.runPipeline)
-            self.__running = False
+            self._imspector.disconnect_end(self.imspectorLineEvent, 1)
+            self._imspector.pause()
 
 
 class EtCoordTransformHelper():
