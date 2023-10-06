@@ -38,6 +38,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = QtWidgets.QPushButton('Load pipeline')
         self.setMFXROICalibrationButton = QtWidgets.QPushButton('MINFLUX ROI button calibration')
+        self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Repeat measurement button calibration')
         # create buttons for calibrating coordinate transform, recording binary mask, loading scan params
         self.coordTransfCalibButton = QtWidgets.QPushButton('Transform calibration')
         self.recordBinaryMaskButton = QtWidgets.QPushButton('Record binary mask')
@@ -65,6 +66,14 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_exc_laser_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.mfx_exc_laser = list()
         self.mfx_exc_laser_par = QtWidgets.QComboBox()
+        self.mfx_exc_pwr_label = QtWidgets.QLabel('MFX exc power (%)')
+        self.mfx_exc_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_exc_pwr_edit = QtWidgets.QLineEdit(str(4))
+        self.mfx_act_pwr_label = QtWidgets.QLabel('MFX act power (%)')
+        self.mfx_act_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_act_pwr_edit = QtWidgets.QLineEdit(str(0))
+        self.mfx_act_pwr_edit.setReadOnly(True)  # make it non-editable currently
+        self.mfx_act_pwr_edit.setStyleSheet("color: gray;")
         self.mfx_seq_label = QtWidgets.QLabel('MFX sequence')
         self.mfx_seq_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.mfx_seq = list()
@@ -74,15 +83,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
         self.analysisHelpWidget = AnalysisWidget(*args, **kwargs)
-
-        ### Unused parameters ###
-        self.mfx_exc_pwr_label = QtWidgets.QLabel('MFX exc power (%)')
-        self.mfx_exc_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.mfx_exc_pwr_edit = QtWidgets.QLineEdit(str(5))
-        self.mfx_act_pwr_label = QtWidgets.QLabel('MFX act power (%)')
-        self.mfx_act_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.mfx_act_pwr_edit = QtWidgets.QLineEdit(str(0))
-        #########################
 
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
@@ -128,6 +128,21 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
         currentRow += 1
 
+        self.grid.addWidget(self.mfx_exc_laser_label, currentRow, 2)
+        self.grid.addWidget(self.mfx_exc_laser_par, currentRow, 3)
+
+        currentRow += 1
+
+        self.grid.addWidget(self.mfx_exc_pwr_label, currentRow, 2)
+        self.grid.addWidget(self.mfx_exc_pwr_edit, currentRow, 3)
+
+        currentRow += 1
+
+        self.grid.addWidget(self.mfx_act_pwr_label, currentRow, 2)
+        self.grid.addWidget(self.mfx_act_pwr_edit, currentRow, 3)
+
+        currentRow += 1
+
         self.grid.addWidget(self.size_x_label, currentRow, 2)
         self.grid.addWidget(self.size_x_edit, currentRow, 3)
 
@@ -143,7 +158,23 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
         currentRow +=1
 
+        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 2)
         self.grid.addWidget(self.triggerAllROIsCheck, currentRow, 3)
+
+        ## time sleeps and drag durations
+        self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
+        self.time_sleep_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.time_sleep_edit = QtWidgets.QLineEdit(str(0))
+        self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
+        self.drag_dur_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.drag_dur_edit = QtWidgets.QLineEdit(str(0.04))
+
+        currentRow +=1
+        self.grid.addWidget(self.time_sleep_label, currentRow, 2)
+        self.grid.addWidget(self.time_sleep_edit, currentRow, 3)
+        currentRow +=1
+        self.grid.addWidget(self.drag_dur_label, currentRow, 2)
+        self.grid.addWidget(self.drag_dur_edit, currentRow, 3)
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -232,13 +263,29 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.imgVb.setAspectLocked(True)
 
         self.info_label = QtWidgets.QLabel('<image info>')
+
+        # image min,max levels related widgets
+        self.setLevelsButton = QtWidgets.QPushButton('Set levels')
+        self.levelMinLabel = QtWidgets.QLabel('Level min')
+        self.levelMinLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.levelMinEdit = QtWidgets.QLineEdit(str(0))
+        self.levelMinEdit.setMaximumWidth(50)
+        self.levelMaxLabel = QtWidgets.QLabel('Level max')
+        self.levelMaxLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.levelMaxEdit = QtWidgets.QLineEdit(str(1))
+        self.levelMaxEdit.setMaximumWidth(50)
         
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
 
         self.grid.addWidget(self.info_label, 0, 0)
-        self.grid.addWidget(self.imgVbWidget, 1, 0)
+        self.grid.addWidget(self.levelMinLabel, 0, 1)
+        self.grid.addWidget(self.levelMinEdit, 0, 2)
+        self.grid.addWidget(self.levelMaxLabel, 0, 3)
+        self.grid.addWidget(self.levelMaxEdit, 0, 4)
+        self.grid.addWidget(self.setLevelsButton, 0, 5)
+        self.grid.addWidget(self.imgVbWidget, 1, 0, 1, 6)
 
 
 class CoordTransformWidget(QtWidgets.QWidget):
@@ -314,6 +361,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
             if os.path.isfile(os.path.join(calibrationsDir, transform)):
                 transform = transform.split('.')[0].split('_')[0]
                 self.transformCalibrations.append(transform)
+        self.transformCalibrations = list(reversed(self.transformCalibrations))
         self.transformCalibrationsPar.addItems(self.transformCalibrations)
         self.transformCalibrationsPar.setCurrentIndex(0)        
 

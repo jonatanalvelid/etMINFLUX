@@ -4,23 +4,26 @@ import sys
 import importlib
 import enum
 import warnings
+import time
 import specpy
 import mouse
 from collections import deque
 from datetime import datetime
 from inspect import signature
-from tkinter import Tk, filedialog
+#from tkinter import Tk, filedialog
 
+import tifffile as tiff
 import scipy.ndimage as ndi
 import numpy as np
-from scipy.optimize import least_squares
+#from scipy.optimize import least_squares
 
 warnings.filterwarnings("ignore")
 
-#_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
-#_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
-_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
+_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
+_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
+_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+#_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
+#_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
 class EtMINFLUXController():
     """ Linked to EtMINFLUXWidget."""
@@ -56,7 +59,7 @@ class EtMINFLUXController():
         self._widget.setTriggerModalityList(self.triggerModalityList)
 
         # list of minflux sequences that can be triggered
-        self.mfxSeqList = ['Imaging2D', 'Imaging3D', 'Tracking2D', 'Tracking3D']  # make sure that these options matches exactly thos in Imspector
+        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast']  # make sure that these options matches exactly those in Imspector
         self._widget.setMfxSequenceList(self.mfxSeqList)
 
         # list of available lasers for MFX imaging, get this list manually from Imspector control software
@@ -65,6 +68,7 @@ class EtMINFLUXController():
 
         # create a helper controller for the coordinate transform pop-out widget
         self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget, _transformsDir)
+        self.__analysisHelper = AnalysisImgHelper(self, self._widget.analysisHelpWidget)
 
         # Connect EtMINFLUXWidget and communication channel signals
         self._widget.initiateButton.clicked.connect(self.initiate)
@@ -72,6 +76,7 @@ class EtMINFLUXController():
         self._widget.recordBinaryMaskButton.clicked.connect(self.initiateBinaryMask)
         self._widget.setBusyFalseButton.clicked.connect(self.setBusyFalse)
         self._widget.setMFXROICalibrationButton.clicked.connect(self.setMFXROIButtonPosButtonCall)
+        self._widget.setRepeatMeasCalibrationButton.clicked.connect(self.setRepeatMeasButtonPosButtonCall)
 
         # initiate log for each detected event
         self.resetDetLog()
@@ -85,6 +90,7 @@ class EtMINFLUXController():
     def initiateFlagsParams(self):
         # initiate flags and params
         self.__running = False  # run flag
+        self.__runningMFX = False  # run MFX flag
         self.__runMode = RunMode.Experiment  # run mode currently used
         self.__validating = False  # validation flag
         self.__busy = False  # running pipeline busy flag
@@ -92,28 +98,37 @@ class EtMINFLUXController():
         self.__prevFrames = deque(maxlen=10)  # deque for previous fast frames
         self.__prevAnaFrames = deque(maxlen=10)  # deque for previous preprocessed analysis frames
         self.__binary_mask = None  # binary mask of regions of interest, used by certain pipelines, leave None to consider the whole image
-        self.__binary_frames = 10  # number of frames to use for calculating binary mask 
-        self.__init_frames = 1  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
+        self.__binary_frames = 3  # number of frames to use for calculating binary mask 
+        self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
         self.__validation_frames = 3  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode']  # excluded pipeline parameters when loading param fields
         self.__run_all_aoi = False  # run all detected events/area flag
         self.__areas_of_interest = list()  # list of detected events/areas center coordinates, to go through after pipeline run
         self.__aoi_idx = 0  # index of current area of interest being scanned
-        self.__prev_frames_len = 10  # number of frames in a stack in the confocal measurement in imspector, i.e. frames saved leading up to event detected  TODO: set this when starting an etMINFLUX experiment, based on the size of the stack of the confocal image that can be read
+        self.__prev_frames_len = 0  # number of frames in a stack in the confocal measurement in imspector, i.e. frames saved leading up to event detected
 
         # initiate and set parameters for automatic mouse control
-        self.__mouse_drag_duration = 0.025
-        self.__setMFXROI_button_pos = [200,100]
-        self.__set_repeat_meas_button_pos = [398,67]
+        self.__mouse_drag_duration = 0.04
+        self.__sleepTime = 0.2
+        self.__set_MFXROI_button_pos = [1620,71]
+        self.__set_repeat_meas_button_pos = [1386,72]
+
+    def getTimings(self):
+        self.__sleepTime = float(self._widget.time_sleep_edit.text())
+        self.__mouse_drag_duration = float(self._widget.drag_dur_edit.text())
 
     def initiate(self):
         """ Initiate or stop an etMINFLUX experiment. """
         if not self.__running:
-            # read mfx sequence and laser from GUI
+            # get timings from ROI input
+            self.getTimings()
+            # read mfx sequence and lasers and laser powers from GUI
             sequenceIdx = self._widget.mfx_seq_par.currentIndex()
             self.mfx_seq = self._widget.mfx_seqs[sequenceIdx]
-            #laserIdx = self._widget.mfx_exc_laser_par.currentIndex()
-            #self.mfx_exc_laser = self._widget.mfx_exc_lasers[laserIdx]
+            laserIdx = self._widget.mfx_exc_laser_par.currentIndex()
+            self.mfx_exc_laser = self._widget.mfx_exc_lasers[laserIdx]
+            self.mfx_exc_pwr = float(self._widget.mfx_exc_pwr_edit.text())
+            self.mfx_act_pwr = float(self._widget.mfx_act_pwr_edit.text())
 
             # read trigger modality type from GUI
             modalityIdx = self._widget.triggerModalityPar.currentIndex()
@@ -146,8 +161,8 @@ class EtMINFLUXController():
             self.loadTransform()
             self.__transformCoeffs = self.__coordTransformHelper.getTransformCoeffs()
             self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0]
-            self.__prev_frames_len = self._imspector.active_measurement().stack(0).sizes()[1]  #TODO: Check that this is the correct number
-            print(f'Prev frames len: {self.__prev_frames_len}')
+            #self.__prev_frames_len = self._imspector.active_measurement().stack(0).sizes()[1]  #TODO: Check that this is the correct number
+            #print(f'Prev frames len: {self.__prev_frames_len}')
             self.__confocalLineCurr = 0
             # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
             self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
@@ -156,13 +171,16 @@ class EtMINFLUXController():
             self._widget.initiateButton.setText('Stop')
             self.__running = True
         else:
-            # disconnect signals and turn off fast laser
-            self._imspector.disconnect_end(self.imspectorLineEvent, 1) # disconnect Imspector confocal image frame finished to running pipeline
-            # TODO: disconnect signal from end of MINFLUX measurement to scanEnded()  TODO DO THIS LATER, WHEN MINFLUX IMAGING IS ACTUALLY STARTING, OR DO IT DIRECTLY PROGRAMMATICALLY AS THE IMAGING HAS TO BE STOPPED FROM HERE
-            # TODO: stop Imspector confocal imaging
-            self._widget.initiateButton.setText('Initiate')
-            self.resetPipelineParamVals()
-            self.resetRunParams()
+            if self.__runningMFX:
+                self.stopMFX()
+                self.scanEnded()
+            else:
+                # disconnect signals and reset parameters
+                self._imspector.disconnect_end(self.imspectorLineEvent, 1)  # disconnect Imspector confocal image frame finished to running pipeline
+                self._imspector.pause()
+                self._widget.initiateButton.setText('Initiate')
+                self.resetPipelineParamVals()
+                self.resetRunParams()
 
     def imspectorLineEvent(self):
         self.__confocalLineCurr += 1
@@ -234,16 +252,21 @@ class EtMINFLUXController():
 
     def continueFastModality(self):
         """ Continue the confocal imaging, after a MINFLUX event acquisition has been performed. """
-        if self._widget.endlessScanCheck.isChecked() and not self.__running:
-            # connect communication channel signals
-            # TODO: connect signal from update of image to running pipeline #xxx.sigUpdateImage.connect(self.runPipeline)
+        if self._widget.endlessScanCheck.isChecked():
+            # connect end of frame signals and start scanning
+            self.__confocalLineCurr = 0
+            # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
+            self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
+            # TODO: connect signal from end of MINFLUX measurement to scanEnded() TODO DO THIS LATER, WHEN MINFLUX IMAGING IS ACTUALLY STARTING, OR DO IT DIRECTLY PROGRAMMATICALLY AS THE IMAGING HAS TO BE STOPPED FROM HERE
+            self.startConfocalScanning()
             self._widget.initiateButton.setText('Stop')
             self.__running = True
-        elif not self._widget.endlessScanCheck.isChecked():
-            # TODO: disconnect signal from end of scan to scanEnded() #xxx.sigScanEnded.disconnect(self.scanEnded)
+        else:
+            # disconnect signals and reset parameters
+            self._imspector.disconnect_end(self.imspectorLineEvent, 1)  # disconnect Imspector confocal image frame finished to running pipeline
             self._widget.initiateButton.setText('Initiate')
-            self.__running = False
             self.resetPipelineParamVals()
+            self.resetRunParams()
 
     def loadTransform(self):
         """ Load a previously saved coordinate transform. """
@@ -259,24 +282,45 @@ class EtMINFLUXController():
 
     def initiateBinaryMask(self):
         """ Initiate the process of calculating a binary mask of the region of interest. """
-        self.__binary_stack = None
-        # TODO: activate configuration for stack of N confocal imgs
-        self._imspector.connect_end(self.calculateBinaryMask, 0)
+        self.__binary_stack = []
+        self.__binary_frame = 0
+        self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0]
+        self.__confocalLineCurr = 0
+        self._imspector.connect_end(self.imspectorLineEventBinaryMask, 1)
         self.startConfocalScanning()
         self._widget.recordBinaryMaskButton.setText('Recording...')
 
+    def imspectorLineEventBinaryMask(self):
+        self.__confocalLineCurr += 1
+        if self.__confocalLineCurr == self.__confocalLinesFrame:
+            self.__confocalLineCurr = 0
+            # get image
+            meas = self._imspector.active_measurement()
+            self.__binary_stack.append(np.squeeze(meas.stack(0).data()))
+            self.__binary_frame += 1
+            if self.__binary_frame == self.__binary_frames:
+                self.calculateBinaryMask()
+
     def calculateBinaryMask(self):
         """ Calculate the binary mask of the region of interest. """
-        # get image
-        meas = self._imspector.active_measurement()
-        self.__binary_stack = meas.stack(0).data()  # TODO: NEED TO FIGURE OUT WHICH STACK TO TAKE - ALL STACKS IN A TEMPLATE (I.E. ALL WINDOWS) ARE JUST IN A STACK LIKE THIS
-        img_mean = np.mean(self.__binary_stack, 0)  # TODO: need to check the dims of the image stack, so that it is correct
-        img_bin = ndi.filters.gaussian_filter(img_mean, np.float(self._widget.bin_smooth_edit.text()))
-        self.__binary_mask = np.array(img_bin > np.float(self._widget.bin_thresh_edit.text()))
+        print(0)
+        img_mean = np.mean(self.__binary_stack, 0)
+        print(1)
+        img_bin = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_smooth_edit.text()))
+        print(2)
+        self.__binary_mask = np.array(img_bin > float(self._widget.bin_thresh_edit.text()))
+        print(3)
         self._widget.recordBinaryMaskButton.setText('Record binary mask')
+        print(4)
         self.setAnalysisHelpImg(self.__binary_mask)
+        print(5)
+        print(np.shape(img_bin))
         self.launchHelpWidget()
-        self._imspector.disconnect_end(self.calculateBinaryMask, 0)
+        print(6)
+        self._imspector.disconnect_end(self.imspectorLineEventBinaryMask, 1)
+        print(7)
+        self._imspector.pause()
+        print(8)
 
     def setAnalysisHelpImg(self, img):
         """ Set the preprocessed image in the analysis help widget. """
@@ -320,15 +364,17 @@ class EtMINFLUXController():
 
     def runPipeline(self):
         """ Run the analyis pipeline, called after every fast method frame. """
-        print("running pipeline")
+        #print("running pipeline")
         if not self.__busy:
             # if not still running pipeline on last frame
             # get image
             meas = self._imspector.active_measurement()
+            #print(np.shape(meas.stack(0).data()))
             img = np.squeeze(meas.stack(0).data()[np.mod(self.__fast_frame, self.__prev_frames_len)])  # TODO NEED TO FIGURE OUT WHICH STACK TO TAKE - ALL STACKS IN A TEMPLATE (I.E. ALL CHANNELS IN ALL WINDOWS) ARE SEEMINGLY RANDOMLY ORDERED
-            print(np.shape(img))
+            #print(np.shape(img))
             self.__busy = True
             # log start of pipeline
+            pipeline_start_time = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
             self.setDetLogLine("pipeline_start", datetime.now().strftime('%Ss%fus'))
 
             # run pipeline
@@ -347,6 +393,7 @@ class EtMINFLUXController():
 
             print(self.__fast_frame)
             if self.__fast_frame > self.__init_frames:
+                #print("init frames passed")
                 # if initial settling frames have passed
                 if self.__runMode == RunMode.TestVisualize:
                     # if visualization mode: set analysis image in help widget
@@ -360,9 +407,9 @@ class EtMINFLUXController():
                         if self.__post_event_frames > self.__validation_frames:
                             # if all validation frames have been recorded, pause fast imaging,
                             # end recording, and then continue fast imaging
-                            self.saveValidationImages(prev=True, prev_ana=True)
+                            self.saveValidationImages(prev=True, prev_ana=True, path_prefix=pipeline_start_time)
                             self.pauseFastModality()
-                            self.endRecording()
+                            self.endExperiment()
                             self.continueFastModality()
                             self.__fast_frame = 0
                             self.__validating = False
@@ -399,19 +446,23 @@ class EtMINFLUXController():
                             coords_scan = coords_detected[0]
                     self.setDetLogLine("prepause", datetime.now().strftime('%Ss%fus'))
                     # pause fast imaging
+                    time.sleep(self.__sleepTime)
                     self.pauseFastModality()
+                    time.sleep(self.__sleepTime)
                     self.setDetLogLine("coord_transf_start", datetime.now().strftime('%Ss%fus'))
                     # transform detected coordinate between from pixels to sample position in um (for conf --> MFX)
                     coords_center_scan, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
                     # log detected and scanning center coordinate
                     self.logCoordinates(coords_scan, coords_center_scan)
                     # initiate and run scanning with transformed center coordinate
+                    time.sleep(self.__sleepTime)
                     self.initiateMFX(position=coords_center_scan)
+                    time.sleep(self.__sleepTime)
                     self.runMFX()
 
                     # buffer latest fast frame and save validation images
                     self.__prevFrames.append(img)
-                    self.saveValidationImages(prev=True, prev_ana=False)
+                    self.saveValidationImages(prev=True, prev_ana=False, path_prefix=pipeline_start_time)
                     self.__busy = False
                     return
             # use latest fast frame as background for next pipeline run
@@ -424,7 +475,7 @@ class EtMINFLUXController():
             self.__fast_frame += 1
             # unset busy flag
             self.setBusyFalse()
-            print('finished runPipeline')
+            #print('finished runPipeline')
 
     def logCoordinates(self, coords_scan, coords_center_scan):
         """ Log detection and scan coordinates. """
@@ -436,14 +487,35 @@ class EtMINFLUXController():
 
     def initiateMFX(self, position=[0.0,0.0], ROI_size=[1.0,1.0]):
         """ Prepare a MINFLUX scan at the defined position. """
-        self.setMFXSequence(self.mfx_seq)
         ROI_size = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
         self.setMINFLUXROI(position, ROI_size)
+        time.sleep(self.__sleepTime)
+        self.setMFXSequence(self.mfx_seq)
+        self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
 
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
-        self._imspector.value_at('Minflux\sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
+        self._imspector.value_at('Minflux/sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
 
+    def setMFXLasers(self, exc_laser, exc_pwr, act_pwr):
+        """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
+        laser_exc_idxs = [6,3,1]
+        # set all excitation to 0 and off
+        for laser_exc_idx in laser_exc_idxs:
+            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/active', specpy.ValueTree.Measurement).set(False)
+            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/power/calibrated', specpy.ValueTree.Measurement).set(0)
+        # set excitation
+        laser_exc_idx = str(laser_exc_idxs[self.mfxExcLaserList.index(exc_laser)])
+        laser_status_exc = True
+        if exc_pwr == 0:
+            exc_pwr = 0.1
+        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+laser_exc_idx+'/active', specpy.ValueTree.Measurement).set(laser_status_exc)
+        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+laser_exc_idx+'/power/calibrated', specpy.ValueTree.Measurement).set(exc_pwr)
+        # set activation
+        laser_status_act = True if act_pwr > 0 else False
+        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
+        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
+        
     def setMINFLUXROI(self, position, ROI_size):
         """ Set the MINFLUX ROI by mouse control: drag ROI, and click "Set as MFX ROI"-button"""
         positions = (position[0] - ROI_size[0]/self.__px_size_mon/2,
@@ -451,39 +523,51 @@ class EtMINFLUXController():
                     position[0] + ROI_size[0]/self.__px_size_mon/2,
                     position[1] + ROI_size[1]/self.__px_size_mon/2)
         mouse.drag(*positions, absolute=True, duration=self.__mouse_drag_duration)
-        mouse.move(*self.__setMFXROI_button_pos)
+        time.sleep(self.__sleepTime)
+        mouse.move(*self.__set_MFXROI_button_pos)
         mouse.click()
 
     def runMFX(self):
         """ Run event-triggered MINFLUX acquisition in small ROI. """
         self._imspector.start()
+        self.__runningMFX = True
 
     def setMFXROIButtonPosButtonCall(self):
         mouse.on_click(self.setMFXROIButtonPos)
 
+    def setRepeatMeasButtonPosButtonCall(self):
+        mouse.on_click(self.setRepeatMeasButtonPos)
+
     def setMFXROIButtonPos(self):
         mouse_pos = mouse.get_position()
-        self.__setMFXROI_button_pos = np.array(mouse_pos)
+        self.__set_MFXROI_button_pos = np.array(mouse_pos)
+        mouse.unhook_all()
+
+    def setRepeatMeasButtonPos(self):
+        mouse_pos = mouse.get_position()
+        self.__set_repeat_meas_button_pos = np.array(mouse_pos)
         mouse.unhook_all()
 
     def stopMFX(self):
         """ Stop MINFLUX measurement. """
         self._imspector.pause()
+        self.__runningMFX = False
 
-    def saveValidationImages(self, prev=True, prev_ana=True):
+    def saveValidationImages(self, prev=True, prev_ana=True, path_prefix='YMD-HMS'):
         """ Save the validation fast images of an event detection, fast images and/or preprocessed analysis images. """
         if prev:
             print(f'Length of prev frames: {len(self.__prevFrames)}')
-            # TODO: save detectorFast frames leading up to event
-            # #xxx.sigSaveImage.emit(self.detectorFast, np.array(list(self.__prevFrames)))  # (detector, imagestack)
+            self._saveImage(self.__prevFrames, path_prefix, 'conf-raw')
             self.__prevFrames.clear()
-            print(f'Length of prev frames: {len(self.__prevFrames)}')
         if prev_ana:
             print(f'Length of prev_ana frames: {len(self.__prevAnaFrames)}')
-            # TODO: save preprocessed detectorFast frames leading up to event
-            # #xxx.sigSaveImage.emit(self.detectorFast, np.array(list(self.__prevAnaFrames)))  # (detector, imagestack)
+            self._saveImage(self.__prevAnaFrames, path_prefix, 'conf-ana')
             self.__prevAnaFrames.clear()
-            print(f'Length of prev_ana frames: {len(self.__prevAnaFrames)}')
+
+    def _saveImage(self, img, path_prefix, path_suffix):
+        fileName = path_prefix + '_' + path_suffix + '.tif'
+        filePath = os.path.join(_dataDir, fileName)
+        tiff.imwrite(filePath, img)
 
     def pauseFastModality(self):
         """ Pause the fast method, when an event has been detected. """
@@ -491,6 +575,23 @@ class EtMINFLUXController():
             self._imspector.disconnect_end(self.imspectorLineEvent, 1)
             self._imspector.pause()
 
+
+class AnalysisImgHelper():
+    """ Analysis image widget help controller. """
+    def __init__(self, etMINFLUXController, analysisWidget, *args, **kwargs):
+        self.etMINFLUXController = etMINFLUXController
+        self._widget = analysisWidget
+
+        self.levels = [0,1]
+
+        # connect signals from widget
+        self._widget.setLevelsButton.clicked.connect(self.setLevels)
+
+    def setLevels(self):
+        """ Set analysis image min,max levels from ROI. """
+        min_val = float(self._widget.levelMinEdit.text())
+        max_val = float(self._widget.levelMaxEdit.text())
+        self._widget.img.setLevels([min_val, max_val])
 
 class EtCoordTransformHelper():
     """ Coordinate transform help widget controller. """
@@ -570,6 +671,12 @@ class EtCoordTransformHelper():
         self.__transformCoeffs[4] = int(params[4])
 
 
+class RunMode(enum.Enum):
+    Experiment = 1
+    TestVisualize = 2
+    TestValidate = 3
+    
+
 def insertSuffix(filename, suffix, newExt=None):
     names = os.path.splitext(filename)
     if newExt is None:
@@ -587,12 +694,6 @@ def getUniqueName(name):
             name = insertSuffix(name, '_{}'.format(n))
         n += 1
     return ''.join((name, ext))
-
-
-class RunMode(enum.Enum):
-    Experiment = 1
-    TestVisualize = 2
-    TestValidate = 3
 
 
 class ImspectorMock():
