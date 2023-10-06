@@ -18,16 +18,18 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # generate dropdown list for coordinate transformations
         self.transformPipelines = list()
         self.transformPipelinePar = QtWidgets.QComboBox()
+        self.transformPipelineLabel = QtWidgets.QLabel('Transform pipeline')
+        self.transformPipelineLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         # generate dropdown list for trigger modalities
         self.triggerModality = list()
         self.triggerModalityPar = QtWidgets.QComboBox()
         self.triggerModalityPar_label = QtWidgets.QLabel('Trigger modality')
-        self.triggerModalityPar_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.triggerModalityPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         # add all experiment modes in a dropdown list
         self.experimentModes = ['Experiment','TestVisualize','TestValidate']
         self.experimentModesPar = QtWidgets.QComboBox()
         self.experimentModesPar_label = QtWidgets.QLabel('Experiment mode')
-        self.experimentModesPar_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.experimentModesPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.experimentModesPar.addItems(self.experimentModes)
         self.experimentModesPar.setCurrentIndex(0)
         # create lists for current pipeline parameters: labels and editable text fields
@@ -48,127 +50,101 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.endlessScanCheck = QtWidgets.QCheckBox('Endless')
         # create check box for scan all detected ROIs
         self.triggerAllROIsCheck = QtWidgets.QCheckBox('Trigger all ROIs')
+        # create check box for pre-setting ROI size
+        self.presetROISizeCheck = QtWidgets.QCheckBox('Pre-set ROI size')
+        self.presetROISizeCheck.setChecked(True)
         # create editable fields for binary mask calculation threshold and smoothing
-        self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold')
-        self.bin_thresh_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
+        self.bin_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_thresh_edit = QtWidgets.QLineEdit(str(10))
         self.bin_smooth_label = QtWidgets.QLabel('Bin. smooth (px)')
-        self.bin_smooth_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.bin_smooth_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_smooth_edit = QtWidgets.QLineEdit(str(2))
         # create editable fields for MFX acquisition parameters
-        self.size_x_label = QtWidgets.QLabel('Size X (µm)')
-        self.size_x_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.size_x_label = QtWidgets.QLabel('MFX ROI size X (µm)')
+        self.size_x_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.size_x_edit = QtWidgets.QLineEdit(str(2))
-        self.size_y_label = QtWidgets.QLabel('Size Y (µm)')
-        self.size_y_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.size_y_label = QtWidgets.QLabel('MFX ROI size Y (µm)')
+        self.size_y_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.size_y_edit = QtWidgets.QLineEdit(str(2))
         self.mfx_exc_laser_label = QtWidgets.QLabel('MFX exc laser')
-        self.mfx_exc_laser_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_exc_laser_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.mfx_exc_laser = list()
         self.mfx_exc_laser_par = QtWidgets.QComboBox()
         self.mfx_exc_pwr_label = QtWidgets.QLabel('MFX exc power (%)')
-        self.mfx_exc_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_exc_pwr_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.mfx_exc_pwr_edit = QtWidgets.QLineEdit(str(4))
         self.mfx_act_pwr_label = QtWidgets.QLabel('MFX act power (%)')
-        self.mfx_act_pwr_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_act_pwr_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.mfx_act_pwr_edit = QtWidgets.QLineEdit(str(0))
         self.mfx_act_pwr_edit.setReadOnly(True)  # make it non-editable currently
         self.mfx_act_pwr_edit.setStyleSheet("color: gray;")
         self.mfx_seq_label = QtWidgets.QLabel('MFX sequence')
-        self.mfx_seq_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.mfx_seq_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.mfx_seq = list()
         self.mfx_seq_par = QtWidgets.QComboBox()
+        ## time sleeps and drag durations
+        self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
+        self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.time_sleep_edit = QtWidgets.QLineEdit(str(0))
+        self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
+        self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.drag_dur_edit = QtWidgets.QLineEdit(str(0.04))
+
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
-
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
         self.analysisHelpWidget = AnalysisWidget(*args, **kwargs)
 
+        # create grid and grid layout
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
 
         # initialize widget controls
         currentRow = 0
-
         self.grid.addWidget(self.initiateButton, currentRow, 0)
         self.grid.addWidget(self.endlessScanCheck, currentRow, 1)
         self.grid.addWidget(self.experimentModesPar_label, currentRow, 2)
         self.grid.addWidget(self.experimentModesPar, currentRow, 3)
-
+        self.grid.addWidget(self.setBusyFalseButton, currentRow, 4)
         currentRow += 1
-
         self.grid.addWidget(self.loadPipelineButton, currentRow, 0)
         self.grid.addWidget(self.analysisPipelinePar, currentRow, 1)
-        self.grid.addWidget(self.transformPipelinePar, currentRow, 2)
-        self.grid.addWidget(self.coordTransfCalibButton, currentRow, 3)
-
+        self.grid.addWidget(self.transformPipelineLabel, currentRow, 2)
+        self.grid.addWidget(self.transformPipelinePar, currentRow, 3)
+        self.grid.addWidget(self.coordTransfCalibButton, currentRow, 4)
         currentRow += 1
-
         self.grid.addWidget(self.bin_smooth_label, currentRow, 2)
         self.grid.addWidget(self.bin_smooth_edit, currentRow, 3)
-
+        self.grid.addWidget(self.recordBinaryMaskButton, currentRow, 4)
         currentRow += 1
-
         self.grid.addWidget(self.bin_thresh_label, currentRow, 2)
         self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
-
-        currentRow += 1
-
-        self.grid.addWidget(self.recordBinaryMaskButton, currentRow, 3)
-
         currentRow +=1
-
         self.grid.addWidget(self.triggerModalityPar_label, currentRow, 2)
         self.grid.addWidget(self.triggerModalityPar, currentRow, 3)
-
+        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 4)
         currentRow += 1
-
         self.grid.addWidget(self.mfx_seq_label, currentRow, 2)
         self.grid.addWidget(self.mfx_seq_par, currentRow, 3)
-
+        self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 4)
         currentRow += 1
-
         self.grid.addWidget(self.mfx_exc_laser_label, currentRow, 2)
         self.grid.addWidget(self.mfx_exc_laser_par, currentRow, 3)
-
         currentRow += 1
-
         self.grid.addWidget(self.mfx_exc_pwr_label, currentRow, 2)
         self.grid.addWidget(self.mfx_exc_pwr_edit, currentRow, 3)
-
         currentRow += 1
-
         self.grid.addWidget(self.mfx_act_pwr_label, currentRow, 2)
         self.grid.addWidget(self.mfx_act_pwr_edit, currentRow, 3)
-
         currentRow += 1
-
         self.grid.addWidget(self.size_x_label, currentRow, 2)
         self.grid.addWidget(self.size_x_edit, currentRow, 3)
-
+        self.grid.addWidget(self.triggerAllROIsCheck, currentRow, 4)
         currentRow += 1
-
         self.grid.addWidget(self.size_y_label, currentRow, 2)
         self.grid.addWidget(self.size_y_edit, currentRow, 3)
-
-        currentRow +=1 
-
-        self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 2)
-        self.grid.addWidget(self.setBusyFalseButton, currentRow, 3)
-
-        currentRow +=1
-
-        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 2)
-        self.grid.addWidget(self.triggerAllROIsCheck, currentRow, 3)
-
-        ## time sleeps and drag durations
-        self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
-        self.time_sleep_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.time_sleep_edit = QtWidgets.QLineEdit(str(0))
-        self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
-        self.drag_dur_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.drag_dur_edit = QtWidgets.QLineEdit(str(0.04))
-
+        self.grid.addWidget(self.presetROISizeCheck, currentRow, 4)
         currentRow +=1
         self.grid.addWidget(self.time_sleep_label, currentRow, 2)
         self.grid.addWidget(self.time_sleep_edit, currentRow, 3)
@@ -261,6 +237,7 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.imgVb.addItem(self.img)
         self.imgVb.setAspectLocked(True)
+        self.imgVb.invertY(True)
 
         self.info_label = QtWidgets.QLabel('<image info>')
 

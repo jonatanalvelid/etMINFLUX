@@ -28,7 +28,10 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
         binary_mask = np.ones(np.shape(img)).astype('uint16')
 
     img = np.array(img).astype('float32')
-    prev_frame = np.array(prev_frame).astype('float32')
+    if len(prev_frames) != 0:
+        prev_frame = np.array(prev_frames[0]).astype('float32')
+    else:
+        prev_frame = np.zeros(np.shape(img)).astype('float32')
     if init_smooth==1:
         img = ndi.filters.gaussian_filter(img, smoothing_radius)
         prev_frame = ndi.filters.gaussian_filter(prev_frame, smoothing_radius)
@@ -43,7 +46,7 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     # get filter structuring element
     footprint = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=[size,size])
     # maximum filter (dilation + equal)
-    image_max = cv2.dilate(img_ana.get(), kernel=footprint)
+    image_max = cv2.dilate(img_ana, kernel=footprint)
     mask = np.equal(img_ana, np.array(image_max))
     mask &= np.greater(img_ana, thresh_abs)
     
@@ -51,8 +54,8 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     coordinates = np.nonzero(mask)
     intensities = img_ana[coordinates]
     # highest peak first
-    idx_maxsort = np.argsort(-intensities).get()
-    coordinates = tuple(arr.get() for arr in coordinates)
+    idx_maxsort = np.argsort(-intensities)
+    coordinates = tuple(arr for arr in coordinates)
     coordinates = np.transpose(coordinates)[idx_maxsort]
     
     if ensure_spacing==1:
@@ -93,7 +96,10 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     if len(coordinates) > num_peaks:
         coordinates = coordinates[:int(num_peaks),:]
 
+    # TODO: detect also the size of the peak and put it in here
+    roi_sizes = False
+
     if testmode:
-        return coordinates, exinfo, img_ana.get()
+        return coordinates, roi_sizes, exinfo, img_ana
     else:
-        return coordinates, exinfo
+        return coordinates, roi_sizes, exinfo
