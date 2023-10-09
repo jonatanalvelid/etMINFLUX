@@ -1,11 +1,10 @@
 import numpy as np
 from scipy import ndimage as ndi
 import cv2
-from scipy.spatial import cKDTree, distance
 
 def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None,
-                        min_dist=30, thresh_abs=20, num_peaks=10, smoothing_radius=2, 
-                        ensure_spacing=1, border_limit=15, init_smooth=1):
+                        presetROIsize=None, min_dist=30, thresh_abs=20, num_peaks=10, smoothing_radius=2, 
+                        border_limit=15, init_smooth=1):
     """
     Common parameters:
     img - current image,
@@ -23,6 +22,7 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     border_limit - how much of the border to remove peaks from in pixels
     init_smooth - if to perform an initial smoothing of the raw image or not (bool 0/1)
     """
+    roi_sizes = False
 
     if binary_mask is None or np.shape(binary_mask) != np.shape(img):
         binary_mask = np.ones(np.shape(img)).astype('uint16')
@@ -57,32 +57,6 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     idx_maxsort = np.argsort(-intensities)
     coordinates = tuple(arr for arr in coordinates)
     coordinates = np.transpose(coordinates)[idx_maxsort]
-    
-    if ensure_spacing==1:
-        output = coordinates
-        if len(coordinates):
-            # Use KDtree to find the peaks that are too close to each other
-            tree = cKDTree(coordinates, balanced_tree=False, compact_nodes=False, leafsize=50)
-            indices = tree.query_ball_point(coordinates, workers=1, r=min_dist, p=np.inf, return_sorted=False)
-            rejected_peaks_indices = set()
-            for idx, candidates in enumerate(indices):
-                if idx not in rejected_peaks_indices:
-                    # keep current point and the points at exactly spacing from it
-                    candidates.remove(idx)
-                    dist = distance.cdist(
-                        [coordinates[idx]],
-                        coordinates[candidates],
-                        distance.minkowski,
-                        p=np.inf,
-                    ).reshape(-1)
-                    candidates = [
-                        c for c, d in zip(candidates, dist) if d < min_dist
-                    ]
-                    # candidates.remove(keep)
-                    rejected_peaks_indices.update(candidates)
-            # Remove the peaks that are too close to each other
-            output = np.delete(coordinates, tuple(rejected_peaks_indices), axis=0)
-        coordinates = output
 
     # remove everything on the border (takes ~2-3ms if there are a lot of detected coordinates, but usually this is not the case)
     imsize = np.shape(img)[0]
@@ -96,8 +70,8 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     if len(coordinates) > num_peaks:
         coordinates = coordinates[:int(num_peaks),:]
 
-    # TODO: detect also the size of the peak and put it in here
-    roi_sizes = False
+    if not presetROIsize:
+        roi_sizes = [[2.0, 2.0] for _ in coordinates]  # TODO: fake as of now
 
     if testmode:
         return coordinates, roi_sizes, exinfo, img_ana

@@ -96,6 +96,7 @@ class EtMINFLUXController():
         self.__validating = False  # validation flag
         self.__busy = False  # running pipeline busy flag
         self.__presetROISize = True
+        self.__conf_config = 'ov conf'
         #self.__bkg = None  # bkg image
         self.__prevFrames = deque(maxlen=10)  # deque for previous fast frames
         self.__prevAnaFrames = deque(maxlen=10)  # deque for previous preprocessed analysis frames
@@ -103,18 +104,17 @@ class EtMINFLUXController():
         self.__binary_frames = 2  # number of frames to use for calculating binary mask 
         self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
-        self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode']  # excluded pipeline parameters when loading param fields
+        self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
         self.__run_all_aoi = False  # run all detected events/area flag
         self.__prev_frames_len = 0  # number of frames in a stack in the confocal measurement in imspector, i.e. frames saved leading up to event detected
 
         # initiate and set parameters for automatic mouse control
-        self.__mouse_drag_duration = 0.04
-        self.__sleepTime = 0.2
-        self.__set_MFXROI_button_pos = [1529,76]
-        self.__set_repeat_meas_button_pos = [1296,72]
+        self.__set_MFXROI_button_pos = [1531,72]
+        self.__set_repeat_meas_button_pos = [1300,74]
 
     def getTimings(self):
         self.__sleepTime = float(self._widget.time_sleep_edit.text())
+        self.__sleepTimeROISwitch = float(self._widget.time_sleep_roiswitch_edit.text())
         self.__mouse_drag_duration = float(self._widget.drag_dur_edit.text())
 
     def initiate(self):
@@ -164,7 +164,7 @@ class EtMINFLUXController():
             self.__confocalLineCurr = 0
             # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
             self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
-            # TODO: connect signal from end of MINFLUX measurement to scanEnded() TODO DO THIS LATER, WHEN MINFLUX IMAGING IS ACTUALLY STARTING, OR DO IT DIRECTLY PROGRAMMATICALLY AS THE IMAGING HAS TO BE STOPPED FROM HERE
+            # TODO: connect signal from end of MINFLUX measurement to scanEnded() - consider this if adding the use of the timer until MINFLUX measurement stop that is implemented in Imspector?
             self.startConfocalScanning()
             self._widget.initiateButton.setText('Stop')
             self.__running = True
@@ -187,21 +187,25 @@ class EtMINFLUXController():
             self.runPipeline()
 
     def startConfocalScanning(self):
+        # ensure activate configuration is conf overview
+        meas = self._imspector.active_measurement()
+        cfg = meas.configuration(self.__conf_config)
+        meas.activate(cfg)
         # set repeat measurement and start scan
         mouse.move(*self.__set_repeat_meas_button_pos)
         mouse.click()
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
-        self.setDetLogLine("scan_end",datetime.now().strftime('%Ss%fus'))
         # TODO: save all acquisition data (confocal frames and MINFLUX data) - is it possible to keep multiple confocal frames always, by using a rotating set of like 5 confocal configs (all the same) in different windows? Or also a stack of 5 frames recorded (assuming we can know when one frame finished), that does just keep overwriting each other, and we could know on which frame it finished.
-        if not self.__run_all_aoi or self.__aoi_deque.isempty():
+        idx = self.__aoi_deque.maxlen-len(self.__aoi_deque)
+        self.setDetLogLine(f"scan_end_{idx}",datetime.now().strftime('%Hh%Mm%Ss%fus'))
+        if not self.__run_all_aoi or not self.__aoi_deque:
             self.endExperiment()
             self.continueFastModality()
             self.__fast_frame = 0
         elif self.__run_all_aoi:
-            time.sleep(3)  # to make sure Imspector is ready for setting a new MFX ROI
-            # TODO: need to make sure that Imspector is with confocal image at front again, otherwise drawing of new ROI will be done in the MFX image...?
+            time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector is ready for setting a new MFX ROI
             self.newROIMFX(self.__aoi_deque.popleft(), roi_idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
 
     def setDetLogLine(self, key, val, *args):
@@ -237,10 +241,10 @@ class EtMINFLUXController():
 
     def logPipelineParamVals(self):
         """ Put analysis pipeline parameter values in the log file. """
-        params_ignore = ['img','bkg','binary_mask','testmode','exinfo']
+        #params_ignore = ['img','bkg','binary_mask','testmode','exinfo']
         param_names = list()
         for pipeline_param_name, _ in self.__pipeline_params.items():
-            if pipeline_param_name not in params_ignore:
+            if pipeline_param_name not in self.__params_exclude:
                 param_names.append(pipeline_param_name)
         for key, val in zip(param_names, self.__pipeline_param_vals):
             self.setDetLogLine(key, val)
@@ -248,7 +252,7 @@ class EtMINFLUXController():
     def continueFastModality(self):
         """ Continue the confocal imaging, after a MINFLUX event acquisition has been performed. """
         if self._widget.endlessScanCheck.isChecked():
-            time.sleep(0.05)
+            time.sleep(self.__sleepTime)
             # connect end of frame signals and start scanning
             self.__confocalLineCurr = 0
             # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
@@ -307,7 +311,6 @@ class EtMINFLUXController():
         self._widget.recordBinaryMaskButton.setText('Record binary mask')
         self.setAnalysisHelpImg(self.__binary_mask)
         self._imspector.disconnect_end(self.imspectorLineEventBinaryMask, 1)
-        print(np.max(img_bin))
 
     def setAnalysisHelpImg(self, img):
         """ Set the preprocessed image in the analysis help widget. """
@@ -349,6 +352,8 @@ class EtMINFLUXController():
         self.__validating = False
         self.__fast_frame = 0
         self.__post_event_frames = 0
+        self.__aoi_deque = deque(maxlen=0)
+        self.__aoi_sizes_deque = deque(maxlen=0)
 
     def runPipeline(self):
         """ Run the analyis pipeline, called after every fast method frame. """
@@ -363,7 +368,7 @@ class EtMINFLUXController():
             self.__busy = True
             # log start of pipeline
             pipeline_start_time = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
-            self.setDetLogLine("pipeline_start", datetime.now().strftime('%Ss%fus'))
+            self.setDetLogLine("pipeline_start", datetime.now().strftime('%Hh%Mm%Ss%fus'))
 
             # run pipeline
             if self.__runMode == RunMode.TestVisualize or self.__runMode == RunMode.TestValidate:
@@ -371,13 +376,13 @@ class EtMINFLUXController():
                 coords_detected, roi_sizes, self.__exinfo, img_ana = self.pipeline(img, self.__prevFrames, self.__binary_mask,
                                                                         (self.__runMode==RunMode.TestVisualize or
                                                                         self.__runMode==RunMode.TestValidate),
-                                                                        self.__exinfo, *self.__pipeline_param_vals)
+                                                                        self.__exinfo, self.__presetROISize, *self.__pipeline_param_vals)
             else:
                 # if chosen experiment mode: run pipeline without analysis image return
                 coords_detected, roi_sizes, self.__exinfo = self.pipeline(img, self.__prevFrames, self.__binary_mask,
                                                                self.__runMode==RunMode.TestVisualize,
-                                                               self.__exinfo, *self.__pipeline_param_vals)
-            self.setDetLogLine("pipeline_end", datetime.now().strftime('%Ss%fus'))
+                                                               self.__exinfo, self.__presetROISize, *self.__pipeline_param_vals)
+            self.setDetLogLine("pipeline_end", datetime.now().strftime('%Hh%Mm%Ss%fus'))
 
             #print(self.__fast_frame)
             if self.__fast_frame > self.__init_frames:
@@ -386,6 +391,8 @@ class EtMINFLUXController():
                 if self.__runMode == RunMode.TestVisualize:
                     # if visualization mode: set analysis image in help widget
                     self.setAnalysisHelpImg(img_ana)
+                    if coords_detected.size != 0:
+                        print(coords_detected)
                 elif self.__runMode == RunMode.TestValidate:
                     # if validation mode: set analysis image in help widget,
                     # and start to record validation frames after event
@@ -442,23 +449,29 @@ class EtMINFLUXController():
                             coords_scan = coords_detected[0]
                         if not self.__presetROISize:
                             roi_size = roi_sizes[0]
-                    self.setDetLogLine("prepause", datetime.now().strftime('%Ss%fus'))
+                    # invert pixel position
+                    coords_scan = np.flip(coords_scan)
+                    self.setDetLogLine("prepause", datetime.now().strftime('%Hh%Mm%Ss%fus'))
                     # pause fast imaging
                     self.pauseFastModality()
-                    self.setDetLogLine("coord_transf_start", datetime.now().strftime('%Ss%fus'))
+                    self.setDetLogLine("coord_transf_start", datetime.now().strftime('%Hh%Mm%Ss%fus'))
                     # transform detected coordinate between from pixels to sample position in um (for conf --> MFX)
-                    coords_center_scan, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
+                    coords_center_scan, coords_center_um, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
                     if self.__presetROISize:
                         roi_size_scan = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
+                        roi_size_um_scan = roi_size_scan
                     else:
-                        coord_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
-                        coord_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
+                        coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
+                        coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
                         roi_size_scan = np.subtract(coord_top, coord_bot)
-                        
+                        roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
                     # log detected and scanning center coordinate
-                    self.logCoordinates(coords_scan, coords_center_scan)
+                    if self.__run_all_aoi:
+                        self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
+                    else:
+                        self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
                     # initiate and run scanning with transformed center coordinate
-                    self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan)
+                    self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
                     self.runMFX()
 
                     # buffer latest fast frame and save validation images
@@ -476,44 +489,66 @@ class EtMINFLUXController():
             self.setBusyFalse()
             #print('finished runPipeline')
 
-    def newROIMFX(self, coords_scan, roi_size, roi_idx):
+    def newROIMFX(self, coords_scan, roi_idx):
+        # switch active Imspector window to conf overview
+        meas = self._imspector.active_measurement()
+        cfg = meas.configuration(self.__conf_config)
+        meas.activate(cfg)
         # transform detected coordinate between from pixels to sample position in um
-        coords_center_scan, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
+        coords_center_scan, coords_center_um, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
         if self.__presetROISize:
             roi_size_scan = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
+            roi_size_um_scan = roi_size_scan
         else:
             roi_size = self.__aoi_sizes_deque.popleft()
-            roi_size_scan = np.subtract(self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs),self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs))
+            coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
+            coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
+            roi_size_scan = np.subtract(coord_top, coord_bot)
+            roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
+        time.sleep(self.__sleepTime)
         # log detected and scanning center coordinate
-        self.logCoordinates(coords_scan, coords_center_scan, idx=roi_idx)
+        self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=roi_idx)
         # initiate and run scanning with transformed center coordinate
-        self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan)
+        self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
         self.runMFX()
 
-    def logCoordinates(self, coords_scan, coords_center_scan, idx=None):
+    def logCoordinates(self, coords_scan, coords_center_scan, roi_size, idx=None):
         """ Log detection and scan coordinates. """
         if idx:
             self.setDetLogLine(f"x_center_px_{idx}", coords_scan[0])
             self.setDetLogLine(f"y_center_px_{idx}", coords_scan[1])
             self.setDetLogLine(f"x_center_um_{idx}", coords_center_scan[0])
             self.setDetLogLine(f"y_center_um_{idx}", coords_center_scan[1])
-            self.setDetLogLine(f"scan_initiate_{idx}", datetime.now().strftime('%Ss%fus'))
+            self.setDetLogLine(f"x_roi_size_um_{idx}", roi_size[0])
+            self.setDetLogLine(f"y_roi_size_um_{idx}", roi_size[1])
+            self.setDetLogLine(f"scan_initiate_{idx}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
         else:
             self.setDetLogLine("x_center_px", coords_scan[0])
             self.setDetLogLine("y_center_px", coords_scan[1])
             self.setDetLogLine("x_center_um", coords_center_scan[0])
             self.setDetLogLine("y_center_um", coords_center_scan[1])
-            self.setDetLogLine("scan_initiate", datetime.now().strftime('%Ss%fus'))
+            self.setDetLogLine("x_roi_size_um", roi_size[0])
+            self.setDetLogLine("y_roi_size_um", roi_size[1])
+            self.setDetLogLine("scan_initiate", datetime.now().strftime('%Hh%Mm%Ss%fus'))
 
-    def initiateMFX(self, position=[0.0,0.0], ROI_size=[1.0,1.0]):
+    def initiateMFX(self, position=[0.0,0.0], ROI_size=[10,10], ROI_size_um=[1.0,1.0], pos_conf=[0,0]):
         """ Prepare a MINFLUX scan at the defined position. """
         self.setMFXROI(position, ROI_size)
+        time.sleep(self.__sleepTime)
         self.setMFXSequence(self.mfx_seq)
+        #time.sleep(self.__sleepTime)
+        self.setMFXDataTag(pos_conf, ROI_size_um, self.__aoi_deque.maxlen-len(self.__aoi_deque))
+        #time.sleep(self.__sleepTime)
         self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
+        time.sleep(self.__sleepTime)
 
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
         self._imspector.value_at('Minflux/sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
+
+    def setMFXDataTag(self, position, roi_size, roi_idx):
+        datatag = 'ROI'+str(roi_idx)+'-Pos['+str(position[0])+','+str(position[1])+']'+'-Size['+str(roi_size[0])+','+str(roi_size[1])+']'
+        self._imspector.value_at('Minflux/tag', specpy.ValueTree.Measurement).set(datatag)
 
     def setMFXLasers(self, exc_laser, exc_pwr, act_pwr):
         """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
@@ -536,6 +571,7 @@ class EtMINFLUXController():
         
     def setMFXROI(self, position, ROI_size):
         """ Set the MINFLUX ROI by mouse control: drag ROI, and click "Set as MFX ROI"-button"""
+        # get monitor px position
         if self.__presetROISize:
             positions = (position[0] - ROI_size[0]/self.__px_size_mon/2,
                         position[1] - ROI_size[1]/self.__px_size_mon/2,
@@ -565,13 +601,13 @@ class EtMINFLUXController():
         mouse_pos = mouse.get_position()
         self.__set_MFXROI_button_pos = np.array(mouse_pos)
         mouse.unhook_all()
-        #print(self.__set_MFXROI_button_pos)
+        print(self.__set_MFXROI_button_pos)
 
     def setRepeatMeasButtonPos(self):
         mouse_pos = mouse.get_position()
         self.__set_repeat_meas_button_pos = np.array(mouse_pos)
         mouse.unhook_all()
-        #print(self.__set_repeat_meas_button_pos)
+        print(self.__set_repeat_meas_button_pos)
 
     def stopMFX(self):
         """ Stop MINFLUX measurement. """

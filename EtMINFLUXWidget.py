@@ -86,10 +86,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         ## time sleeps and drag durations
         self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
         self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.time_sleep_edit = QtWidgets.QLineEdit(str(0))
+        self.time_sleep_edit = QtWidgets.QLineEdit(str(0.1))
+        self.time_sleep_roiswitch_label = QtWidgets.QLabel('Time sleeps - ROI switch (s)')
+        self.time_sleep_roiswitch_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(3))
         self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
         self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.drag_dur_edit = QtWidgets.QLineEdit(str(0.04))
+        self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
 
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
@@ -148,6 +151,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow +=1
         self.grid.addWidget(self.time_sleep_label, currentRow, 2)
         self.grid.addWidget(self.time_sleep_edit, currentRow, 3)
+        currentRow +=1
+        self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 2)
+        self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 3)
         currentRow +=1
         self.grid.addWidget(self.drag_dur_label, currentRow, 2)
         self.grid.addWidget(self.drag_dur_edit, currentRow, 3)
