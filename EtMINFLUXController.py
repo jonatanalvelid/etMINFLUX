@@ -15,15 +15,17 @@ from inspect import signature
 import tifffile as tiff
 import scipy.ndimage as ndi
 import numpy as np
+import pyqtgraph as pg
 #from scipy.optimize import least_squares
 
 warnings.filterwarnings("ignore")
 
-_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
-_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
-_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-#_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
-#_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
+#_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
+#_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
+#_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
+_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
+_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
 class EtMINFLUXController():
     """ Linked to EtMINFLUXWidget."""
@@ -54,9 +56,9 @@ class EtMINFLUXController():
         self._widget.setAnalysisPipelines(self.analysisDir)
         self._widget.setTransformations(self.transformDir)
 
-        # list of trigger modalities
-        self.triggerModalityList = ['Confocal', 'Confocal fast']
-        self._widget.setTriggerModalityList(self.triggerModalityList)
+        ## list of trigger modalities
+        #self.triggerModalityList = ['Confocal', 'Confocal fast']
+        #self._widget.setTriggerModalityList(self.triggerModalityList)
 
         # list of minflux sequences that can be triggered
         self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast']  # make sure that these options matches exactly those in Imspector
@@ -96,6 +98,7 @@ class EtMINFLUXController():
         self.__validating = False  # validation flag
         self.__busy = False  # running pipeline busy flag
         self.__presetROISize = True
+        self.__lineWiseAnalysis = False
         self.__conf_config = 'ov conf'
         #self.__bkg = None  # bkg image
         self.__prevFrames = deque(maxlen=10)  # deque for previous fast frames
@@ -106,7 +109,6 @@ class EtMINFLUXController():
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
         self.__run_all_aoi = False  # run all detected events/area flag
-        self.__prev_frames_len = 0  # number of frames in a stack in the confocal measurement in imspector, i.e. frames saved leading up to event detected
 
         # initiate and set parameters for automatic mouse control
         self.__set_MFXROI_button_pos = [1531,72]
@@ -130,12 +132,12 @@ class EtMINFLUXController():
             self.mfx_exc_pwr = float(self._widget.mfx_exc_pwr_edit.text())
             self.mfx_act_pwr = float(self._widget.mfx_act_pwr_edit.text())
 
-            # read trigger modality type from GUI
-            modalityIdx = self._widget.triggerModalityPar.currentIndex()
-            self.fast_modality = self._widget.triggerModalities[modalityIdx]
+            ## read trigger modality type from GUI
+            #modalityIdx = self._widget.triggerModalityPar.currentIndex()
+            #self.fast_modality = self._widget.triggerModalities[modalityIdx]
             # read param for using all ROIs
             self.__run_all_aoi = self._widget.triggerAllROIsCheck.isChecked()
-            # Read params for analysis pipeline from GUI
+            # read params for analysis pipeline from GUI
             self.__pipeline_param_vals = self.readPipelineParams()
             # reset general run parameters
             self.resetRunParams()
@@ -158,13 +160,17 @@ class EtMINFLUXController():
             # load selected coordinate transform
             self.loadTransform()
             self.__transformCoeffs = self.__coordTransformHelper.getTransformCoeffs()
+            # read param for line-wise analysis pipeline runs and decide analysis period
             self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0]
-            #self.__prev_frames_len = self._imspector.active_measurement().stack(0).sizes()[1]  #TODO: Check that this is the correct number
-            #print(f'Prev frames len: {self.__prev_frames_len}')
-            self.__confocalLineCurr = 0
+            self.__lineWiseAnalysisCheck = self._widget.lineWiseAnalysisCheck.isChecked()
+            if self.__lineWiseAnalysisCheck:
+                self.__confocalLinesAnalysisPeriod = int(self._widget.lines_analysis_edit.text())
+            else:
+                self.__confocalLinesAnalysisPeriod = self.__confocalLinesFrame
+            self.__confocalLineAnalysisCurr = 0
+            self.__confocalLineFrameCurr = 0
             # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
             self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
-            # TODO: connect signal from end of MINFLUX measurement to scanEnded() - consider this if adding the use of the timer until MINFLUX measurement stop that is implemented in Imspector?
             self.startConfocalScanning()
             self._widget.initiateButton.setText('Stop')
             self.__running = True
@@ -181,10 +187,14 @@ class EtMINFLUXController():
             self.resetRunParams()
 
     def imspectorLineEvent(self):
-        self.__confocalLineCurr += 1
-        if self.__confocalLineCurr == self.__confocalLinesFrame:
-            self.__confocalLineCurr = 0
+        self.__confocalLineAnalysisCurr += 1
+        self.__confocalLineFrameCurr += 1
+        if self.__confocalLineAnalysisCurr == self.__confocalLinesAnalysisPeriod:
+            self.__confocalLineAnalysisCurr = 0
             self.runPipeline()
+        if self.__confocalLineFrameCurr >= self.__confocalLinesFrame:
+            self.__confocalLineFrameCurr = 0
+            self.bufferLatestImages()
 
     def startConfocalScanning(self):
         # ensure activate configuration is conf overview
@@ -197,7 +207,6 @@ class EtMINFLUXController():
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
-        # TODO: save all acquisition data (confocal frames and MINFLUX data) - is it possible to keep multiple confocal frames always, by using a rotating set of like 5 confocal configs (all the same) in different windows? Or also a stack of 5 frames recorded (assuming we can know when one frame finished), that does just keep overwriting each other, and we could know on which frame it finished.
         idx = self.__aoi_deque.maxlen-len(self.__aoi_deque)
         self.setDetLogLine(f"scan_end_{idx}",datetime.now().strftime('%Hh%Mm%Ss%fus'))
         if not self.__run_all_aoi or not self.__aoi_deque:
@@ -215,17 +224,21 @@ class EtMINFLUXController():
             self.__detLog[key] = val
 
     def endExperiment(self):
-        """ Save all etMINFLUX scan metadata/log file. """
+        """ Save all etMINFLUX scan metadata/log file and data. """
         self.setDetLogLine("pipeline", self.getPipelineName())
         self.logPipelineParamVals()
         # save log file with temporal info of trigger event
-        filename = datetime.utcnow().strftime('%Hh%Mm%Ss%fus')
-        name = os.path.join(_logsDir, filename) + '_log'
+        filename_prefix = datetime.utcnow().strftime('%Y%m%d-%Hh%Mm%Ss')
+        name = os.path.join(_logsDir, filename_prefix) + '_log'
         savename = getUniqueName(name)
         log = [f'{key}: {self.__detLog[key]}' for key in self.__detLog]
         with open(f'{savename}.txt', 'w') as f:
             [f.write(f'{st}\n') for st in log]
         self.resetDetLog()
+        # save confocal data leading up to event image
+        self.saveValidationImages(prev=True, prev_ana=True, path_prefix=filename_prefix)
+        # save all MINFLUX data (including multiple ROI, if so)
+        self.saveMINFLUXdata(path_prefix=filename_prefix)
 
     def getTransformName(self):
         """ Get the name of the pipeline currently used. """
@@ -255,9 +268,8 @@ class EtMINFLUXController():
             time.sleep(self.__sleepTime)
             # connect end of frame signals and start scanning
             self.__confocalLineCurr = 0
-            # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
+            # start confocal imaging loop
             self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
-            # TODO: connect signal from end of MINFLUX measurement to scanEnded() TODO DO THIS LATER, WHEN MINFLUX IMAGING IS ACTUALLY STARTING, OR DO IT DIRECTLY PROGRAMMATICALLY AS THE IMAGING HAS TO BE STOPPED FROM HERE
             self.startConfocalScanning()
             self._widget.initiateButton.setText('Stop')
             self.__running = True
@@ -285,7 +297,7 @@ class EtMINFLUXController():
         self.launchHelpWidget()
         self.__binary_stack = []
         self.__binary_frame = 0
-        self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0]
+        self.__confocalLinesAnalysisPeriod = self._imspector.active_measurement().stack(0).sizes()[0]
         self.__confocalLineCurr = 0
         self._imspector.connect_end(self.imspectorLineEventBinaryMask, 1)
         self.startConfocalScanning()
@@ -293,7 +305,7 @@ class EtMINFLUXController():
 
     def imspectorLineEventBinaryMask(self):
         self.__confocalLineCurr += 1
-        if self.__confocalLineCurr == self.__confocalLinesFrame:
+        if self.__confocalLineCurr == self.__confocalLinesAnalysisPeriod:
             self.__confocalLineCurr = 0
             # get image
             meas = self._imspector.active_measurement()
@@ -357,14 +369,11 @@ class EtMINFLUXController():
 
     def runPipeline(self):
         """ Run the analyis pipeline, called after every fast method frame. """
-        #print("running pipeline")
         if not self.__busy:
             # if not still running pipeline on last frame
             # get image
             meas = self._imspector.active_measurement()
-            #print(np.shape(meas.stack(0).data()))
-            img = np.squeeze(meas.stack(0).data()[np.mod(self.__fast_frame, self.__prev_frames_len)])  # TODO NEED TO FIGURE OUT WHICH STACK TO TAKE - ALL STACKS IN A TEMPLATE (I.E. ALL CHANNELS IN ALL WINDOWS) ARE SEEMINGLY RANDOMLY ORDERED
-            #print(np.shape(img))
+            self.img = np.squeeze(meas.stack(0).data()[0])
             self.__busy = True
             # log start of pipeline
             pipeline_start_time = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
@@ -373,35 +382,32 @@ class EtMINFLUXController():
             # run pipeline
             if self.__runMode == RunMode.TestVisualize or self.__runMode == RunMode.TestValidate:
                 # if chosen a test mode: run pipeline with analysis image return
-                coords_detected, roi_sizes, self.__exinfo, img_ana = self.pipeline(img, self.__prevFrames, self.__binary_mask,
+                coords_detected, roi_sizes, self.__exinfo, self.img_ana = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
                                                                         (self.__runMode==RunMode.TestVisualize or
                                                                         self.__runMode==RunMode.TestValidate),
                                                                         self.__exinfo, self.__presetROISize, *self.__pipeline_param_vals)
             else:
                 # if chosen experiment mode: run pipeline without analysis image return
-                coords_detected, roi_sizes, self.__exinfo = self.pipeline(img, self.__prevFrames, self.__binary_mask,
+                coords_detected, roi_sizes, self.__exinfo = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
                                                                self.__runMode==RunMode.TestVisualize,
                                                                self.__exinfo, self.__presetROISize, *self.__pipeline_param_vals)
             self.setDetLogLine("pipeline_end", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-
-            #print(self.__fast_frame)
             if self.__fast_frame > self.__init_frames:
-                #print("init frames passed")
                 # if initial settling frames have passed
                 if self.__runMode == RunMode.TestVisualize:
                     # if visualization mode: set analysis image in help widget
-                    self.setAnalysisHelpImg(img_ana)
+                    self.setAnalysisHelpImg(self.img_ana)
+                    # plot detected coords in help widget
                     if coords_detected.size != 0:
                         print(coords_detected)
+                        self.__analysisHelper.plotScatter(coords_detected, color='g')
                 elif self.__runMode == RunMode.TestValidate:
-                    # if validation mode: set analysis image in help widget,
-                    # and start to record validation frames after event
-                    self.setAnalysisHelpImg(img_ana)
+                    # if validation mode: set analysis image in help widget, and start to record validation frames after event
+                    self.setAnalysisHelpImg(self.img_ana)
                     if self.__validating:
                         # if currently validating
                         if self.__post_event_frames > self.__validation_frames:
-                            # if all validation frames have been recorded, pause fast imaging,
-                            # end recording, and then continue fast imaging
+                            # if all validation frames have been recorded, pause fast imaging, end recording, continue fast imaging
                             self.saveValidationImages(prev=True, prev_ana=True, path_prefix=pipeline_start_time)
                             self.__fast_frame = 0
                             self.pauseFastModality()
@@ -411,7 +417,8 @@ class EtMINFLUXController():
                             self.__validating = False
                         self.__post_event_frames += 1
                     elif coords_detected.size != 0:
-                        # if some events where detected and not validating
+                        # if some events where detected and not validating plot detected coords in help widget
+                        self.__analysisHelper.plotScatter(coords_detected, color='g')
                         # take first detected coords as event
                         if np.size(coords_detected) > 2:
                             coords_scan = coords_detected[0,:]
@@ -473,21 +480,20 @@ class EtMINFLUXController():
                     # initiate and run scanning with transformed center coordinate
                     self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
                     self.runMFX()
-
-                    # buffer latest fast frame and save validation images
-                    self.__prevFrames.append(img)
+                    # save validation images
                     self.saveValidationImages(prev=True, prev_ana=False, path_prefix=pipeline_start_time)
                     self.__busy = False
                     return
-            # buffer latest fast frame and save validation images
-            self.__prevFrames.append(img)
-            if self.__runMode == RunMode.TestValidate:
-                # if validation mode: buffer previous preprocessed analysis frame
-                self.__prevAnaFrames.append(img_ana)
             self.__fast_frame += 1
             # unset busy flag
             self.setBusyFalse()
-            #print('finished runPipeline')
+
+    def bufferLatestImages(self):
+        # buffer latest fast frame and save validation images
+        self.__prevFrames.append(self.img)
+        if self.__runMode == RunMode.TestValidate:
+            # if validation mode: buffer previous preprocessed analysis frame
+            self.__prevAnaFrames.append(self.img_ana)
 
     def newROIMFX(self, coords_scan, roi_idx):
         # switch active Imspector window to conf overview
@@ -541,6 +547,7 @@ class EtMINFLUXController():
         #time.sleep(self.__sleepTime)
         self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
         time.sleep(self.__sleepTime)
+        # potential todo: connect signal from end of MINFLUX measurement to scanEnded() - consider this if adding the use of the timer until MINFLUX measurement stop that is implemented in Imspector?
 
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
@@ -625,6 +632,12 @@ class EtMINFLUXController():
             self._saveImage(self.__prevAnaFrames, path_prefix, 'conf-ana')
             self.__prevAnaFrames.clear()
 
+    def saveMINFLUXdata(self, path_prefix='YMD-HMS'):
+        meas = self._imspector.active_measurement()
+        fileName = path_prefix + '_' + 'minflux' + '.msr'
+        filePath = os.path.join(_dataDir, fileName)
+        meas.save_as(filePath)
+
     def _saveImage(self, img, path_prefix, path_suffix):
         fileName = path_prefix + '_' + path_suffix + '.tif'
         filePath = os.path.join(_dataDir, fileName)
@@ -664,6 +677,9 @@ class AnalysisImgHelper():
         min_val = float(self._widget.levelMinEdit.text())
         max_val = float(self._widget.levelMaxEdit.text())
         self._widget.img.setLevels([min_val, max_val])
+
+    def plotScatter(self, coords, color):
+        self._widget.scatterPlot.setData(x=[coord[0] for coord in coords], y=[coord[1] for coord in coords], pen=pg.mkPen(None), brush=color, symbol='x', size=15)
 
 class EtCoordTransformHelper():
     """ Coordinate transform help widget controller. """

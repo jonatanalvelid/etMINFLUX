@@ -1,7 +1,7 @@
 import os
 
 import pyqtgraph as pg
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtWidgets, QtCore, QtGui
 
 
 class EtMINFLUXWidget(QtWidgets.QWidget):
@@ -20,11 +20,11 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.transformPipelinePar = QtWidgets.QComboBox()
         self.transformPipelineLabel = QtWidgets.QLabel('Transform pipeline')
         self.transformPipelineLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        # generate dropdown list for trigger modalities
-        self.triggerModality = list()
-        self.triggerModalityPar = QtWidgets.QComboBox()
-        self.triggerModalityPar_label = QtWidgets.QLabel('Trigger modality')
-        self.triggerModalityPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        ## generate dropdown list for trigger modalities
+        #self.triggerModality = list()
+        #self.triggerModalityPar = QtWidgets.QComboBox()
+        #self.triggerModalityPar_label = QtWidgets.QLabel('Trigger modality')
+        #self.triggerModalityPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         # add all experiment modes in a dropdown list
         self.experimentModes = ['Experiment','TestVisualize','TestValidate']
         self.experimentModesPar = QtWidgets.QComboBox()
@@ -39,8 +39,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton = QtWidgets.QPushButton('Initiate etMINFLUX')
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = QtWidgets.QPushButton('Load pipeline')
-        self.setMFXROICalibrationButton = QtWidgets.QPushButton('MINFLUX ROI button calibration')
-        self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Repeat measurement button calibration')
+        self.setMFXROICalibrationButton = QtWidgets.QPushButton('Set MFX ROI calib.')
+        self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Rep. meas. calib.')
         # create buttons for calibrating coordinate transform, recording binary mask, loading scan params
         self.coordTransfCalibButton = QtWidgets.QPushButton('Transform calibration')
         self.recordBinaryMaskButton = QtWidgets.QPushButton('Record binary mask')
@@ -53,6 +53,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # create check box for pre-setting ROI size
         self.presetROISizeCheck = QtWidgets.QCheckBox('Pre-set ROI size')
         self.presetROISizeCheck.setChecked(True)
+        # create check box for linewise analysis pipeline runs
+        self.lineWiseAnalysisCheck = QtWidgets.QCheckBox('Run analysis pipeline linewise')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
         self.bin_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -83,7 +85,11 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_seq_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.mfx_seq = list()
         self.mfx_seq_par = QtWidgets.QComboBox()
-        ## time sleeps and drag durations
+        # create editable fields for analysis control parameters
+        self.lines_analysis_label = QtWidgets.QLabel('Analysis period (lines)')
+        self.lines_analysis_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.lines_analysis_edit = QtWidgets.QLineEdit(str(100))
+        # time sleeps and drag durations
         self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
         self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.time_sleep_edit = QtWidgets.QLineEdit(str(0.1))
@@ -93,6 +99,28 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
         self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
+        # create GUI group titles
+        self.timing_title = QtWidgets.QLabel('Timing')
+        self.timing_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.timing_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.gui_calibration_title = QtWidgets.QLabel('GUI calibration')
+        self.gui_calibration_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.gui_calibration_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.minflux_title = QtWidgets.QLabel('MINFLUX imaging parameters')
+        self.minflux_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.minflux_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.pipeline_title = QtWidgets.QLabel('Analysis pipeline')
+        self.pipeline_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.pipeline_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.analysis_control_title = QtWidgets.QLabel('Analysis control')
+        self.analysis_control_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.analysis_control_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.binary_title = QtWidgets.QLabel('Binary mask')
+        self.binary_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.binary_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.transform_title = QtWidgets.QLabel('Coordinate transform')
+        self.transform_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.transform_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
 
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
@@ -111,11 +139,19 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.experimentModesPar, currentRow, 3)
         self.grid.addWidget(self.setBusyFalseButton, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.pipeline_title, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.transform_title, currentRow, 3, 1, 2)
+        currentRow += 1
         self.grid.addWidget(self.loadPipelineButton, currentRow, 0)
         self.grid.addWidget(self.analysisPipelinePar, currentRow, 1)
         self.grid.addWidget(self.transformPipelineLabel, currentRow, 2)
         self.grid.addWidget(self.transformPipelinePar, currentRow, 3)
         self.grid.addWidget(self.coordTransfCalibButton, currentRow, 4)
+        #currentRow += 1
+        #self.grid.addWidget(self.triggerModalityPar_label, currentRow, 2)
+        #self.grid.addWidget(self.triggerModalityPar, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.binary_title, currentRow, 3, 1, 2)
         currentRow += 1
         self.grid.addWidget(self.bin_smooth_label, currentRow, 2)
         self.grid.addWidget(self.bin_smooth_edit, currentRow, 3)
@@ -123,14 +159,11 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.bin_thresh_label, currentRow, 2)
         self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
-        currentRow +=1
-        self.grid.addWidget(self.triggerModalityPar_label, currentRow, 2)
-        self.grid.addWidget(self.triggerModalityPar, currentRow, 3)
-        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.minflux_title, currentRow, 3, 1, 2)
         currentRow += 1
         self.grid.addWidget(self.mfx_seq_label, currentRow, 2)
         self.grid.addWidget(self.mfx_seq_par, currentRow, 3)
-        self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.mfx_exc_laser_label, currentRow, 2)
         self.grid.addWidget(self.mfx_exc_laser_par, currentRow, 3)
@@ -148,13 +181,24 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.size_y_label, currentRow, 2)
         self.grid.addWidget(self.size_y_edit, currentRow, 3)
         self.grid.addWidget(self.presetROISizeCheck, currentRow, 4)
-        currentRow +=1
+        currentRow += 1
+        self.grid.addWidget(self.analysis_control_title, currentRow, 3, 1, 2)
+        currentRow += 1
+        self.grid.addWidget(self.lines_analysis_label, currentRow, 2)
+        self.grid.addWidget(self.lines_analysis_edit, currentRow, 3)
+        self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.timing_title, currentRow, 3)
+        self.grid.addWidget(self.gui_calibration_title, currentRow, 4)
+        currentRow += 1
         self.grid.addWidget(self.time_sleep_label, currentRow, 2)
         self.grid.addWidget(self.time_sleep_edit, currentRow, 3)
-        currentRow +=1
+        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 4)
+        currentRow += 1
         self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 2)
         self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 3)
-        currentRow +=1
+        self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 4)
+        currentRow += 1
         self.grid.addWidget(self.drag_dur_label, currentRow, 2)
         self.grid.addWidget(self.drag_dur_edit, currentRow, 3)
 
@@ -167,7 +211,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
             self.grid.removeWidget(param)
 
         # initiate parameter fields for all the parameters in the pipeline chosen
-        currentRow = 2
+        currentRow = 3
         
         self.param_names = list()
         self.param_edits = list()
@@ -204,11 +248,11 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.transformPipelinePar.addItems(self.transformPipelines)
         self.transformPipelinePar.setCurrentIndex(0)
 
-    def setTriggerModalityList(self, modalityNames):
-        """ Set combobox with available trigger modalities to use. """
-        self.triggerModalities = modalityNames
-        self.triggerModalityPar.addItems(self.triggerModalities)
-        self.triggerModalityPar.setCurrentIndex(0)
+    #def setTriggerModalityList(self, modalityNames):
+    #    """ Set combobox with available trigger modalities to use. """
+    #    self.triggerModalities = modalityNames
+    #    self.triggerModalityPar.addItems(self.triggerModalities)
+    #    self.triggerModalityPar.setCurrentIndex(0)
 
     def setMfxSequenceList(self, mfxSeqs):
         """ Set combobox with available minflux sequences to use. """
@@ -241,9 +285,12 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.img = pg.ImageItem(axisOrder = 'row-major')
         #self.img.translate(-0.5, -0.5)
 
+        self.scatterPlot = pg.ScatterPlotItem()
+
         self.imgVb.addItem(self.img)
         self.imgVb.setAspectLocked(True)
         self.imgVb.invertY(True)
+        self.imgVb.addItem(self.scatterPlot)
 
         self.info_label = QtWidgets.QLabel('<image info>')
 
