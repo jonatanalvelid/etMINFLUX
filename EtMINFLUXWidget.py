@@ -62,6 +62,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.bin_smooth_label = QtWidgets.QLabel('Bin. smooth (px)')
         self.bin_smooth_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_smooth_edit = QtWidgets.QLineEdit(str(2))
+        # create editable field for number of initial frames without analysis
+        self.init_frames_label = QtWidgets.QLabel('Initial frames')
+        self.init_frames_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.init_frames_edit = QtWidgets.QLineEdit(str(0))
         # create editable fields for MFX acquisition parameters
         self.size_x_label = QtWidgets.QLabel('MFX ROI size X (µm)')
         self.size_x_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -188,6 +192,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.lines_analysis_edit, currentRow, 3)
         self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.init_frames_label, currentRow, 2)
+        self.grid.addWidget(self.init_frames_edit, currentRow, 3)
+        currentRow += 1
         self.grid.addWidget(self.timing_title, currentRow, 3)
         self.grid.addWidget(self.gui_calibration_title, currentRow, 4)
         currentRow += 1
@@ -286,6 +293,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         #self.img.translate(-0.5, -0.5)
 
         self.scatterPlot = pg.ScatterPlotItem()
+        self.rois_draw = []
 
         self.imgVb.addItem(self.img)
         self.imgVb.setAspectLocked(True)

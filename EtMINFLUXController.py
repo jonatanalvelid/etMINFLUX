@@ -20,12 +20,12 @@ import pyqtgraph as pg
 
 warnings.filterwarnings("ignore")
 
-#_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
-#_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
-#_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
-_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
-_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
+_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
+_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
+_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+#_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
+#_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
+#_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
 class EtMINFLUXController():
     """ Linked to EtMINFLUXWidget."""
@@ -169,6 +169,8 @@ class EtMINFLUXController():
                 self.__confocalLinesAnalysisPeriod = self.__confocalLinesFrame
             self.__confocalLineAnalysisCurr = 0
             self.__confocalLineFrameCurr = 0
+            # read number of initial frames without analysis
+            self.__init_frames = int(self._widget.init_frames_edit.text())
             # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
             self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
             self.startConfocalScanning()
@@ -194,6 +196,7 @@ class EtMINFLUXController():
             self.runPipeline()
         if self.__confocalLineFrameCurr >= self.__confocalLinesFrame:
             self.__confocalLineFrameCurr = 0
+            self.__fast_frame += 1
             self.bufferLatestImages()
 
     def startConfocalScanning(self):
@@ -208,13 +211,14 @@ class EtMINFLUXController():
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
         idx = self.__aoi_deque.maxlen-len(self.__aoi_deque)
-        self.setDetLogLine(f"scan_end_{idx}",datetime.now().strftime('%Hh%Mm%Ss%fus'))
+        self.setDetLogLine(f"mfx_end_{idx}",datetime.now().strftime('%Hh%Mm%Ss%fus'))
         if not self.__run_all_aoi or not self.__aoi_deque:
+            time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.endExperiment()
             self.continueFastModality()
             self.__fast_frame = 0
         elif self.__run_all_aoi:
-            time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector is ready for setting a new MFX ROI
+            time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.newROIMFX(self.__aoi_deque.popleft(), roi_idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
 
     def setDetLogLine(self, key, val, *args):
@@ -228,7 +232,7 @@ class EtMINFLUXController():
         self.setDetLogLine("pipeline", self.getPipelineName())
         self.logPipelineParamVals()
         # save log file with temporal info of trigger event
-        filename_prefix = datetime.utcnow().strftime('%Y%m%d-%Hh%Mm%Ss')
+        filename_prefix = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')
         name = os.path.join(_logsDir, filename_prefix) + '_log'
         savename = getUniqueName(name)
         log = [f'{key}: {self.__detLog[key]}' for key in self.__detLog]
@@ -236,7 +240,7 @@ class EtMINFLUXController():
             [f.write(f'{st}\n') for st in log]
         self.resetDetLog()
         # save confocal data leading up to event image
-        self.saveValidationImages(prev=True, prev_ana=True, path_prefix=filename_prefix)
+        self.saveValidationImages(prev=True, prev_ana=False, path_prefix=filename_prefix)
         # save all MINFLUX data (including multiple ROI, if so)
         self.saveMINFLUXdata(path_prefix=filename_prefix)
 
@@ -370,6 +374,7 @@ class EtMINFLUXController():
     def runPipeline(self):
         """ Run the analyis pipeline, called after every fast method frame. """
         if not self.__busy:
+            #print('run pipeline start')
             # if not still running pipeline on last frame
             # get image
             meas = self._imspector.active_measurement()
@@ -393,14 +398,15 @@ class EtMINFLUXController():
                                                                self.__exinfo, self.__presetROISize, *self.__pipeline_param_vals)
             self.setDetLogLine("pipeline_end", datetime.now().strftime('%Hh%Mm%Ss%fus'))
             if self.__fast_frame > self.__init_frames:
+                coords_detected = np.flip(coords_detected, axis=1)
                 # if initial settling frames have passed
                 if self.__runMode == RunMode.TestVisualize:
                     # if visualization mode: set analysis image in help widget
                     self.setAnalysisHelpImg(self.img_ana)
                     # plot detected coords in help widget
                     if coords_detected.size != 0:
-                        print(coords_detected)
                         self.__analysisHelper.plotScatter(coords_detected, color='g')
+                        self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
                 elif self.__runMode == RunMode.TestValidate:
                     # if validation mode: set analysis image in help widget, and start to record validation frames after event
                     self.setAnalysisHelpImg(self.img_ana)
@@ -419,6 +425,7 @@ class EtMINFLUXController():
                     elif coords_detected.size != 0:
                         # if some events where detected and not validating plot detected coords in help widget
                         self.__analysisHelper.plotScatter(coords_detected, color='g')
+                        self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
                         # take first detected coords as event
                         if np.size(coords_detected) > 2:
                             coords_scan = coords_detected[0,:]
@@ -457,7 +464,7 @@ class EtMINFLUXController():
                         if not self.__presetROISize:
                             roi_size = roi_sizes[0]
                     # invert pixel position
-                    coords_scan = np.flip(coords_scan)
+                    #coords_scan = np.flip(coords_scan)
                     self.setDetLogLine("prepause", datetime.now().strftime('%Hh%Mm%Ss%fus'))
                     # pause fast imaging
                     self.pauseFastModality()
@@ -472,25 +479,26 @@ class EtMINFLUXController():
                         coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
                         roi_size_scan = np.subtract(coord_top, coord_bot)
                         roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
+                    # initiate and run scanning with transformed center coordinate
+                    self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
                     # log detected and scanning center coordinate
                     if self.__run_all_aoi:
                         self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
+                        self.setDetLogLine(f"mfx_initiate_{self.__aoi_deque.maxlen-len(self.__aoi_deque)}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
                     else:
                         self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
-                    # initiate and run scanning with transformed center coordinate
-                    self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
+                        self.setDetLogLine("mfx_initiate", datetime.now().strftime('%Hh%Mm%Ss%fus'))
                     self.runMFX()
-                    # save validation images
-                    self.saveValidationImages(prev=True, prev_ana=False, path_prefix=pipeline_start_time)
                     self.__busy = False
+                    #print('run pipeline finished - event!')
                     return
-            self.__fast_frame += 1
             # unset busy flag
             self.setBusyFalse()
+            #print('run pipeline finished')
 
     def bufferLatestImages(self):
         # buffer latest fast frame and save validation images
-        self.__prevFrames.append(self.img)
+        self.__prevFrames.append(np.copy(self.img))
         if self.__runMode == RunMode.TestValidate:
             # if validation mode: buffer previous preprocessed analysis frame
             self.__prevAnaFrames.append(self.img_ana)
@@ -516,6 +524,7 @@ class EtMINFLUXController():
         self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=roi_idx)
         # initiate and run scanning with transformed center coordinate
         self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
+        self.setDetLogLine(f"mfx_initiate_{roi_idx}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
         self.runMFX()
 
     def logCoordinates(self, coords_scan, coords_center_scan, roi_size, idx=None):
@@ -527,7 +536,6 @@ class EtMINFLUXController():
             self.setDetLogLine(f"y_center_um_{idx}", coords_center_scan[1])
             self.setDetLogLine(f"x_roi_size_um_{idx}", roi_size[0])
             self.setDetLogLine(f"y_roi_size_um_{idx}", roi_size[1])
-            self.setDetLogLine(f"scan_initiate_{idx}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
         else:
             self.setDetLogLine("x_center_px", coords_scan[0])
             self.setDetLogLine("y_center_px", coords_scan[1])
@@ -535,7 +543,6 @@ class EtMINFLUXController():
             self.setDetLogLine("y_center_um", coords_center_scan[1])
             self.setDetLogLine("x_roi_size_um", roi_size[0])
             self.setDetLogLine("y_roi_size_um", roi_size[1])
-            self.setDetLogLine("scan_initiate", datetime.now().strftime('%Hh%Mm%Ss%fus'))
 
     def initiateMFX(self, position=[0.0,0.0], ROI_size=[10,10], ROI_size_um=[1.0,1.0], pos_conf=[0,0]):
         """ Prepare a MINFLUX scan at the defined position. """
@@ -681,6 +688,22 @@ class AnalysisImgHelper():
     def plotScatter(self, coords, color):
         self._widget.scatterPlot.setData(x=[coord[0] for coord in coords], y=[coord[1] for coord in coords], pen=pg.mkPen(None), brush=color, symbol='x', size=15)
 
+    def plotRoiRectangles(self, coords, roi_sizes, color, presetROISize):
+        # remove previously drawn ROIs
+        for roi in rois_draw:
+            self._widget.imgVb.removeItem(roi)
+        rois_draw = []
+        # create rectangle items for each ROI
+        roi_size_fix = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
+        for coord, roi_size in zip(coords, roi_sizes):
+            if presetROISize:
+                roi_size = roi_size_fix
+            roi_temp = pg.PlotCurveItem(x=[coord[0]-roi_size[0]/2,coord[0]+roi_size[0]/2,coord[0]+int(roi_size[0]/2),coord[0]-int(roi_size[0]/2),coord[0]-int(roi_size[0]/2)], y=[coord[1]-roi_size[1]/2,coord[1]-roi_size[1]/2,coord[1]+roi_size[1]/2,coord[1]+roi_size[1]/2,coord[1]-roi_size[1]/2], pen=pg.mkPen(color, width=2))
+            self._widget.rois_draw.append(roi_temp)
+        # draw ROIs
+        for roi in self._widget.rois_draw:
+            self._widget.imgVb.addItem(roi)
+
 class EtCoordTransformHelper():
     """ Coordinate transform help widget controller. """
     def __init__(self, etMINFLUXController, coordTransformWidget, saveFolder, *args, **kwargs):
@@ -739,7 +762,7 @@ class EtCoordTransformHelper():
         self.__transformCoeffs[3] = float(self._widget.conf_size_um_edit.text())
         self.__transformCoeffs[4] = int(self._widget.conf_size_px_edit.text())
         # save coordinate transform parameters
-        name = datetime.utcnow().strftime('%y%m%d-%Hh%Mm')
+        name = datetime.now().strftime('%y%m%d-%Hh%Mm')
         filename = os.path.join(self.__saveFolder, name) + self.__calibNameSuffix
         np.savetxt(fname=filename, X=self.__transformCoeffs)
 

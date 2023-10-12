@@ -1,10 +1,11 @@
 import numpy as np
 from scipy import ndimage as ndi
+from skimage import measure
 import cv2
 
 def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None,
                         presetROIsize=None, min_dist=30, thresh_abs=20, num_peaks=10, smoothing_radius=2, 
-                        border_limit=15, init_smooth=1):
+                        border_limit=15, init_smooth=1, roi_border=5, roi_th_factor=6):
     """
     Common parameters:
     img - current image,
@@ -33,8 +34,8 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     else:
         prev_frame = np.zeros(np.shape(img)).astype('float32')
     if init_smooth==1:
-        img = ndi.filters.gaussian_filter(img, smoothing_radius)
-        prev_frame = ndi.filters.gaussian_filter(prev_frame, smoothing_radius)
+        img = ndi.gaussian_filter(img, smoothing_radius)
+        prev_frame = ndi.gaussian_filter(prev_frame, smoothing_radius)
 
     # multiply with binary mask
     img_ana = img * np.array(binary_mask)
@@ -69,9 +70,23 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
     # remove everyhting down to a certain length
     if len(coordinates) > num_peaks:
         coordinates = coordinates[:int(num_peaks),:]
-
+    
+    # roi size calculation
     if not presetROIsize:
-        roi_sizes = [[2.0, 2.0] for _ in coordinates]  # TODO: fake as of now
+        roi_sizes = []
+        cut_size = 50
+        for coords in coordinates:
+            img_cut = img[coords[0]-int(cut_size/2):coords[0]+int(cut_size/2), coords[1]-int(cut_size/2):coords[1]+int(cut_size/2)]
+            peak_val = img[coords[0],coords[1]]
+            img_cut_mask = img_cut > peak_val/roi_th_factor
+            labels_mask = measure.label(img_cut_mask)
+            regions = measure.regionprops(labels_mask)
+            regions.sort(key=lambda x: x.area, reverse=True)
+            if len(regions) > 1:
+                for region in regions[1:]:
+                    labels_mask[region.coords[:,0], region.coords[:,1]] = 0
+            roi_size = [np.max(np.where(labels_mask)[0]) - np.min(np.where(labels_mask)[0]) + roi_border, np.max(np.where(labels_mask)[1]) - np.min(np.where(labels_mask)[1]) + roi_border]
+            roi_sizes.append(roi_size)
 
     if testmode:
         return coordinates, roi_sizes, exinfo, img_ana
