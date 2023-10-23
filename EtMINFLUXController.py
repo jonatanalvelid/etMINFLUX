@@ -670,6 +670,15 @@ class EtMINFLUXController():
             self._widget.size_y_edit.setStyleSheet("color: black;")
             self.__presetROISize = True
 
+    def getTransformCoeffs(self):
+        return self.__transformCoeffs
+    
+    def recTimeFromS(self, time_s):
+        # TODO: Might have to change this into Imspector data type "Duration", but try it out and see if it sets correctly. 
+        time_str = f'{time_s//(60*60):02d}:{np.mod(time_s,(60*60))//60:02d}:{np.mod(time_s,60):02d}'
+        print(time_str)
+        return time_str
+
 class AnalysisImgHelper():
     """ Analysis image widget help controller. """
     def __init__(self, etMINFLUXController, analysisWidget, *args, **kwargs):
@@ -686,23 +695,21 @@ class AnalysisImgHelper():
         self._widget.img.setLevels([min_val, max_val])
 
     def plotScatter(self, coords, color):
-        self._widget.scatterPlot.setData(x=[coord[0] for coord in coords], y=[coord[1] for coord in coords], pen=pg.mkPen(None), brush=color, symbol='x', size=15)
+        self._widget.scatterPlot.setData(x=[coord[0] for coord in coords], y=[coord[1] for coord in coords], pen=pg.mkPen(None), brush=color, symbol='x', size=8)
 
     def plotRoiRectangles(self, coords, roi_sizes, color, presetROISize):
         # remove previously drawn ROIs
-        for roi in rois_draw:
-            self._widget.imgVb.removeItem(roi)
-        rois_draw = []
+        self._widget.removeROIs()
         # create rectangle items for each ROI
-        roi_size_fix = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
+        if presetROISize:
+            µm_px_size = self.etMINFLUXController.getTransformCoeffs()[4]/self.etMINFLUXController.getTransformCoeffs()[3]   # µm to pixels
+            roi_size_fix = [float(self.etMINFLUXController._widget.size_x_edit.text())*µm_px_size, float(self.etMINFLUXController._widget.size_y_edit.text())*µm_px_size]
+            roi_sizes = [roi_size_fix for _ in coords]
         for coord, roi_size in zip(coords, roi_sizes):
-            if presetROISize:
-                roi_size = roi_size_fix
             roi_temp = pg.PlotCurveItem(x=[coord[0]-roi_size[0]/2,coord[0]+roi_size[0]/2,coord[0]+int(roi_size[0]/2),coord[0]-int(roi_size[0]/2),coord[0]-int(roi_size[0]/2)], y=[coord[1]-roi_size[1]/2,coord[1]-roi_size[1]/2,coord[1]+roi_size[1]/2,coord[1]+roi_size[1]/2,coord[1]-roi_size[1]/2], pen=pg.mkPen(color, width=2))
             self._widget.rois_draw.append(roi_temp)
         # draw ROIs
-        for roi in self._widget.rois_draw:
-            self._widget.imgVb.addItem(roi)
+        self._widget.drawROIs()
 
 class EtCoordTransformHelper():
     """ Coordinate transform help widget controller. """

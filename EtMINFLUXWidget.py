@@ -53,6 +53,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # create check box for pre-setting ROI size
         self.presetROISizeCheck = QtWidgets.QCheckBox('Pre-set ROI size')
         self.presetROISizeCheck.setChecked(True)
+        # create check box for pre-setting MFX acquisition recording time
+        self.presetMfxRecTimeCheck = QtWidgets.QCheckBox('Pre-set ROI rec time')
         # create check box for linewise analysis pipeline runs
         self.lineWiseAnalysisCheck = QtWidgets.QCheckBox('Run analysis pipeline linewise')
         # create editable fields for binary mask calculation threshold and smoothing
@@ -73,6 +75,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.size_y_label = QtWidgets.QLabel('MFX ROI size Y (µm)')
         self.size_y_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.size_y_edit = QtWidgets.QLineEdit(str(2))
+        self.mfx_rectime_label = QtWidgets.QLabel('MFX ROI rec time (s)')
+        self.mfx_rectime_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.mfx_rectime_edit = QtWidgets.QLineEdit(str(2))
         self.mfx_exc_laser_label = QtWidgets.QLabel('MFX exc laser')
         self.mfx_exc_laser_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.mfx_exc_laser = list()
@@ -185,6 +190,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.size_y_label, currentRow, 2)
         self.grid.addWidget(self.size_y_edit, currentRow, 3)
         self.grid.addWidget(self.presetROISizeCheck, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.mfx_rectime_label, currentRow, 2)
+        self.grid.addWidget(self.mfx_rectime_edit, currentRow, 3)
+        self.grid.addWidget(self.presetMfxRecTimeCheck, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.analysis_control_title, currentRow, 3, 1, 2)
         currentRow += 1
@@ -324,6 +333,15 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.levelMaxEdit, 0, 4)
         self.grid.addWidget(self.setLevelsButton, 0, 5)
         self.grid.addWidget(self.imgVbWidget, 1, 0, 1, 6)
+
+    def removeROIs(self):
+        for roi in self.rois_draw:
+            self.imgVb.removeItem(roi)
+        self.rois_draw = []
+
+    def drawROIs(self):
+        for roi in self.rois_draw:
+            self.imgVb.addItem(roi)
 
 
 class CoordTransformWidget(QtWidgets.QWidget):
