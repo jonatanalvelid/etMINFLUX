@@ -57,6 +57,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.presetMfxRecTimeCheck = QtWidgets.QCheckBox('Pre-set ROI rec time')
         # create check box for linewise analysis pipeline runs
         self.lineWiseAnalysisCheck = QtWidgets.QCheckBox('Run analysis pipeline linewise')
+        # create check box for randomizing ROIs from binary mask
+        self.triggerRandomROICheck = QtWidgets.QCheckBox('Random ROI (bin)')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
         self.bin_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -182,6 +184,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.mfx_act_pwr_label, currentRow, 2)
         self.grid.addWidget(self.mfx_act_pwr_edit, currentRow, 3)
+        self.grid.addWidget(self.triggerRandomROICheck, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.size_x_label, currentRow, 2)
         self.grid.addWidget(self.size_x_edit, currentRow, 3)

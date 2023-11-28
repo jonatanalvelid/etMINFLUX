@@ -7,9 +7,11 @@ import warnings
 import time
 import specpy
 import mouse
+import threading
 from collections import deque
 from datetime import datetime
 from inspect import signature
+from qtpy import QtCore
 #from tkinter import Tk, filedialog
 
 import tifffile as tiff
@@ -27,10 +29,14 @@ _transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\et
 #_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
 #_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
-class EtMINFLUXController():
+def thread_info(msg):
+    print(msg, int(QtCore.QThread.currentThreadId()), threading.current_thread().name)
+
+class EtMINFLUXController(QtCore.QObject):
     """ Linked to EtMINFLUXWidget."""
 
     def __init__(self, widget,  *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._widget = widget
         
         print('Initializing etMINFLUX controller')
@@ -80,6 +86,15 @@ class EtMINFLUXController():
         self._widget.setMFXROICalibrationButton.clicked.connect(self.setMFXROIButtonPosButtonCall)
         self._widget.setRepeatMeasCalibrationButton.clicked.connect(self.setRepeatMeasButtonPosButtonCall)
         self._widget.presetROISizeCheck.clicked.connect(self.togglePresetROISize)
+        self._widget.presetMfxRecTimeCheck.clicked.connect(self.togglePresetRecTime)
+
+        # create timer for fixed recording time syncing
+        self.timerThread = QtCore.QThread(self)
+        self.recTimeTimer = QtCore.QTimer()
+        self.recTimeTimer.setSingleShot(True)
+        self.recTimeTimer.timeout.connect(self.initiate)
+        self.recTimeTimer.moveToThread(self.timerThread)
+        self.timerThread.started.connect(self.recTimeTimer.start)
 
         # initiate log for each detected event
         self.resetDetLog()
@@ -98,6 +113,7 @@ class EtMINFLUXController():
         self.__validating = False  # validation flag
         self.__busy = False  # running pipeline busy flag
         self.__presetROISize = True
+        self.__presetRecTime = False
         self.__lineWiseAnalysis = False
         self.__conf_config = 'ov conf'
         #self.__bkg = None  # bkg image
@@ -109,10 +125,15 @@ class EtMINFLUXController():
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
         self.__run_all_aoi = False  # run all detected events/area flag
+        self.__rec_time_deadtime = 3  # deadtime when starting MINFLUX recordings, in s
 
         # initiate and set parameters for automatic mouse control
-        self.__set_MFXROI_button_pos = [1531,72]
-        self.__set_repeat_meas_button_pos = [1300,74]
+        # lab default
+        self.__set_MFXROI_button_pos = [652,67]
+        self.__set_repeat_meas_button_pos = [407,64]
+        # office default
+        #self.__set_MFXROI_button_pos = [1531,72]
+        #self.__set_repeat_meas_button_pos = [1300,74]
 
     def getTimings(self):
         self.__sleepTime = float(self._widget.time_sleep_edit.text())
@@ -137,6 +158,8 @@ class EtMINFLUXController():
             #self.fast_modality = self._widget.triggerModalities[modalityIdx]
             # read param for using all ROIs
             self.__run_all_aoi = self._widget.triggerAllROIsCheck.isChecked()
+            # read param for triggering random ROI from binary mask
+            self.__random_roi_bin = self._widget.triggerRandomROICheck.isChecked()
             # read params for analysis pipeline from GUI
             self.__pipeline_param_vals = self.readPipelineParams()
             # reset general run parameters
@@ -162,15 +185,15 @@ class EtMINFLUXController():
             self.__transformCoeffs = self.__coordTransformHelper.getTransformCoeffs()
             # read param for line-wise analysis pipeline runs and decide analysis period
             self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0]
-            self.__lineWiseAnalysisCheck = self._widget.lineWiseAnalysisCheck.isChecked()
-            if self.__lineWiseAnalysisCheck:
+            self.__lineWiseAnalysis = self._widget.lineWiseAnalysisCheck.isChecked()
+            if self.__lineWiseAnalysis:
                 self.__confocalLinesAnalysisPeriod = int(self._widget.lines_analysis_edit.text())
             else:
                 self.__confocalLinesAnalysisPeriod = self.__confocalLinesFrame
             self.__confocalLineAnalysisCurr = 0
             self.__confocalLineFrameCurr = 0
             # read number of initial frames without analysis
-            self.__init_frames = int(self._widget.init_frames_edit.text())
+            self.__init_frames = int(self._widget.init_frames_edit.text()) - 1
             # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
             self._imspector.connect_end(self.imspectorLineEvent, 1) # connect Imspector confocal image frame finished to running pipeline
             self.startConfocalScanning()
@@ -178,6 +201,9 @@ class EtMINFLUXController():
             self.__running = True
         elif self.__runningMFX:
             self.__run_all_aoi = self._widget.triggerAllROIsCheck.isChecked()
+            if self.recTimeTimer.isActive():
+                self.recTimeTimer.stop()
+            self.timerThread.quit()
             self.stopMFX()
             self.scanEnded()
         else:
@@ -187,6 +213,12 @@ class EtMINFLUXController():
             self._widget.initiateButton.setText('Initiate')
             self.resetPipelineParamVals()
             self.resetRunParams()
+
+    def finishMFXROIAuto(self):
+        """ Trigger this when a preset-rec-time MFX ROI has finished. """
+        self.__runningMFX = False
+        self.__run_all_aoi = self._widget.triggerAllROIsCheck.isChecked()
+        self.scanEnded()
 
     def imspectorLineEvent(self):
         self.__confocalLineAnalysisCurr += 1
@@ -370,6 +402,9 @@ class EtMINFLUXController():
         self.__post_event_frames = 0
         self.__aoi_deque = deque(maxlen=0)
         self.__aoi_sizes_deque = deque(maxlen=0)
+        if self.recTimeTimer.isActive():
+            self.recTimeTimer.stop()
+        self.timerThread.quit()
 
     def runPipeline(self):
         """ Run the analyis pipeline, called after every fast method frame. """
@@ -455,6 +490,13 @@ class EtMINFLUXController():
                             self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
                             roi_size = self.__aoi_sizes_deque.popleft()
                         self._widget.initiateButton.setText('Next ROI')
+                    # if random roi from binary: disregard analysis result and trigger random pos
+                    elif self.__random_roi_bin:
+                        possible_pixels = np.where(self.__binary_mask==True)
+                        rand_idx = np.random.randint(0, len(possible_pixels[0]))
+                        coords_scan = [possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]
+                        if not self.__presetROISize:
+                            roi_size = roi_sizes[0]
                     else:
                         # take first detected coords as event
                         if np.size(coords_detected) > 2:
@@ -479,6 +521,10 @@ class EtMINFLUXController():
                         coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
                         roi_size_scan = np.subtract(coord_top, coord_bot)
                         roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
+                    if self.__presetRecTime:
+                        self.__rec_time_scan = float(self._widget.mfx_rectime_edit.text())
+                    else:
+                        self.__rec_time_scan = None
                     # initiate and run scanning with transformed center coordinate
                     self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
                     # log detected and scanning center coordinate
@@ -489,12 +535,8 @@ class EtMINFLUXController():
                         self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
                         self.setDetLogLine("mfx_initiate", datetime.now().strftime('%Hh%Mm%Ss%fus'))
                     self.runMFX()
-                    self.__busy = False
-                    #print('run pipeline finished - event!')
-                    return
             # unset busy flag
             self.setBusyFalse()
-            #print('run pipeline finished')
 
     def bufferLatestImages(self):
         # buffer latest fast frame and save validation images
@@ -522,6 +564,12 @@ class EtMINFLUXController():
         time.sleep(self.__sleepTime)
         # log detected and scanning center coordinate
         self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=roi_idx)
+        # get preset rec time, if using that mode
+        if self.__presetRecTime:
+            rec_time_scan = float(self._widget.mfx_rectime_edit.text())
+            self.__rec_time_scan = rec_time_scan
+        else:
+            self.__rec_time_scan = None
         # initiate and run scanning with transformed center coordinate
         self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
         self.setDetLogLine(f"mfx_initiate_{roi_idx}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
@@ -550,6 +598,12 @@ class EtMINFLUXController():
         time.sleep(self.__sleepTime)
         self.setMFXSequence(self.mfx_seq)
         #time.sleep(self.__sleepTime)
+        if self.__presetRecTime:
+            self.setMFXRecTime()
+            self.rec_time_scan = int((self.__rec_time_scan + self.__rec_time_deadtime) * 1000)  # time in ms
+            self.recTimeTimer.setInterval(self.rec_time_scan)
+            self.timerThread.start()
+            #time.sleep(self.__sleepTime)
         self.setMFXDataTag(pos_conf, ROI_size_um, self.__aoi_deque.maxlen-len(self.__aoi_deque))
         #time.sleep(self.__sleepTime)
         self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
@@ -563,6 +617,11 @@ class EtMINFLUXController():
     def setMFXDataTag(self, position, roi_size, roi_idx):
         datatag = 'ROI'+str(roi_idx)+'-Pos['+str(position[0])+','+str(position[1])+']'+'-Size['+str(roi_size[0])+','+str(roi_size[1])+']'
         self._imspector.value_at('Minflux/tag', specpy.ValueTree.Measurement).set(datatag)
+
+    def setMFXRecTime(self):
+        # setting rec time
+        rec_time_int = int(self.__rec_time_scan)
+        self._imspector.value_at('Minflux/flow/stop_time', specpy.ValueTree.Measurement).set(rec_time_int)
 
     def setMFXLasers(self, exc_laser, exc_pwr, act_pwr):
         """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
@@ -625,7 +684,8 @@ class EtMINFLUXController():
 
     def stopMFX(self):
         """ Stop MINFLUX measurement. """
-        self._imspector.pause()
+        if not self.__presetRecTime:
+            self._imspector.pause()
         self.__runningMFX = False
 
     def saveValidationImages(self, prev=True, prev_ana=True, path_prefix='YMD-HMS'):
@@ -670,14 +730,19 @@ class EtMINFLUXController():
             self._widget.size_y_edit.setStyleSheet("color: black;")
             self.__presetROISize = True
 
+    def togglePresetRecTime(self):
+        if not self._widget.presetMfxRecTimeCheck.isChecked():
+            self._widget.mfx_rectime_edit.setReadOnly(True)
+            self._widget.mfx_rectime_edit.setStyleSheet("color: gray;")
+            self.__presetRecTime = False
+        else:
+            self._widget.mfx_rectime_edit.setReadOnly(False)
+            self._widget.mfx_rectime_edit.setStyleSheet("color: black;")
+            self.__presetRecTime = True
+
     def getTransformCoeffs(self):
         return self.__transformCoeffs
-    
-    def recTimeFromS(self, time_s):
-        # TODO: Might have to change this into Imspector data type "Duration", but try it out and see if it sets correctly. 
-        time_str = f'{time_s//(60*60):02d}:{np.mod(time_s,(60*60))//60:02d}:{np.mod(time_s,60):02d}'
-        print(time_str)
-        return time_str
+
 
 class AnalysisImgHelper():
     """ Analysis image widget help controller. """
@@ -795,7 +860,7 @@ class RunMode(enum.Enum):
     Experiment = 1
     TestVisualize = 2
     TestValidate = 3
-    
+
 
 def insertSuffix(filename, suffix, newExt=None):
     names = os.path.splitext(filename)
