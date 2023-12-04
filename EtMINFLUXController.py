@@ -22,12 +22,12 @@ import pyqtgraph as pg
 
 warnings.filterwarnings("ignore")
 
-_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
-_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
-_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-#_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
-#_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
-#_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
+#_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
+#_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
+#_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
+_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
+_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
 def thread_info(msg):
     print(msg, int(QtCore.QThread.currentThreadId()), threading.current_thread().name)
@@ -439,9 +439,18 @@ class EtMINFLUXController(QtCore.QObject):
                     # if visualization mode: set analysis image in help widget
                     self.setAnalysisHelpImg(self.img_ana)
                     # plot detected coords in help widget
+                    if self.__random_roi_bin:
+                        # if random roi from binary: disregard analysis result and trigger random pos
+                        if self.__binary_mask is not None:
+                            possible_pixels = np.where(self.__binary_mask==True)
+                            rand_idx = np.random.randint(0, len(possible_pixels[0]))
+                            coords_detected = [[possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]]
+                        else:
+                            coords_detected = []
                     if coords_detected.size != 0:
                         self.__analysisHelper.plotScatter(coords_detected, color='g')
                         self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+
                 elif self.__runMode == RunMode.TestValidate:
                     # if validation mode: set analysis image in help widget, and start to record validation frames after event
                     self.setAnalysisHelpImg(self.img_ana)
@@ -474,69 +483,98 @@ class EtMINFLUXController(QtCore.QObject):
                         # flag for start of validation
                         self.__validating = True
                         self.__post_event_frames = 0
-                elif self.__runMode == RunMode.Experiment and coords_detected.size != 0:
-                    # if experiment mode, and some events were detected
-                    if self.__run_all_aoi:
-                        # use all detected coords as events
-                        areas_of_interest = list()
-                        if np.size(coords_detected) > 2:
-                            for pair in coords_detected:
-                                areas_of_interest.append(pair)
-                        else:
-                            areas_of_interest.append(coords_detected[0])
-                        self.__aoi_deque = deque(areas_of_interest, maxlen=len(areas_of_interest))
-                        coords_scan = self.__aoi_deque.popleft()
-                        if not self.__presetROISize:
-                            self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
-                            roi_size = self.__aoi_sizes_deque.popleft()
-                        self._widget.initiateButton.setText('Next ROI')
-                    # if random roi from binary: disregard analysis result and trigger random pos
-                    elif self.__random_roi_bin:
-                        possible_pixels = np.where(self.__binary_mask==True)
-                        rand_idx = np.random.randint(0, len(possible_pixels[0]))
-                        coords_scan = [possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]
-                        if not self.__presetROISize:
-                            roi_size = roi_sizes[0]
-                    else:
-                        # take first detected coords as event
-                        if np.size(coords_detected) > 2:
-                            coords_scan = coords_detected[0,:]
-                        else:
+                elif self.__runMode == RunMode.Experiment:
+                    # if experiment mode
+                    if self.__random_roi_bin:
+                        # if random roi from binary: disregard analysis result and trigger random pos
+                        if self.__binary_mask is not None:
+                            possible_pixels = np.where(self.__binary_mask==True)
+                            rand_idx = np.random.randint(0, len(possible_pixels[0]))
+                            coords_detected = [[possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]]
                             coords_scan = coords_detected[0]
-                        if not self.__presetROISize:
-                            roi_size = roi_sizes[0]
-                    # invert pixel position
-                    #coords_scan = np.flip(coords_scan)
-                    self.setDetLogLine("prepause", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                    # pause fast imaging
-                    self.pauseFastModality()
-                    self.setDetLogLine("coord_transf_start", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                    # transform detected coordinate between from pixels to sample position in um (for conf --> MFX)
-                    coords_center_scan, coords_center_um, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
-                    if self.__presetROISize:
-                        roi_size_scan = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
-                        roi_size_um_scan = roi_size_scan
-                    else:
-                        coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
-                        coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
-                        roi_size_scan = np.subtract(coord_top, coord_bot)
-                        roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
-                    if self.__presetRecTime:
-                        self.__rec_time_scan = float(self._widget.mfx_rectime_edit.text())
-                    else:
-                        self.__rec_time_scan = None
-                    # initiate and run scanning with transformed center coordinate
-                    self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
-                    # log detected and scanning center coordinate
-                    if self.__run_all_aoi:
-                        self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
-                        self.setDetLogLine(f"mfx_initiate_{self.__aoi_deque.maxlen-len(self.__aoi_deque)}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                    else:
-                        self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
-                        self.setDetLogLine("mfx_initiate", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                    self.runMFX()
+                            random_coords_ready = True
+                            if not self.__presetROISize:
+                                roi_size = roi_sizes[0]
+                        else:
+                            random_coords_ready = False
+                    elif coords_detected.size != 0:
+                        # if some events were detected
+                        if self.__run_all_aoi:
+                            # use all detected coords as events
+                            areas_of_interest = list()
+                            if np.size(coords_detected) > 2:
+                                for pair in coords_detected:
+                                    areas_of_interest.append(pair)
+                            else:
+                                areas_of_interest.append(coords_detected[0])
+                            self.__aoi_deque = deque(areas_of_interest, maxlen=len(areas_of_interest))
+                            coords_scan = self.__aoi_deque.popleft()
+                            if not self.__presetROISize:
+                                self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
+                                roi_size = self.__aoi_sizes_deque.popleft()
+                            self._widget.initiateButton.setText('Next ROI')
+                        else:
+                            # take first detected coords as event
+                            if np.size(coords_detected) > 2:
+                                coords_scan = coords_detected[0,:]
+                            else:
+                                coords_scan = coords_detected[0]
+                            if not self.__presetROISize:
+                                roi_size = roi_sizes[0]
+                    if random_coords_ready or coords_detected.size != 0:
+                        # if some events were detected or if we are getting randomized positions from binary
+                        # invert pixel position
+                        #coords_scan = np.flip(coords_scan)
+                        self.setDetLogLine("prepause", datetime.now().strftime('%Hh%Mm%Ss%fus'))
+                        # pause fast imaging
+                        self.pauseFastModality()
+                        self.setDetLogLine("coord_transf_start", datetime.now().strftime('%Hh%Mm%Ss%fus'))
+                        # transform detected coordinate between from pixels to sample position in um (for conf --> MFX)
+                        coords_center_scan, coords_center_um, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
+                        if self.__presetROISize:
+                            roi_size_scan = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
+                            roi_size_um_scan = roi_size_scan
+                        else:
+                            coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
+                            coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
+                            roi_size_scan = np.subtract(coord_top, coord_bot)
+                            roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
+                        if self.__presetRecTime:
+                            self.__rec_time_scan = float(self._widget.mfx_rectime_edit.text())
+                        else:
+                            self.__rec_time_scan = None
+                        # initiate and run scanning with transformed center coordinate
+                        self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
+                        # log detected and scanning center coordinate
+                        if self.__run_all_aoi:
+                            self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
+                            self.setDetLogLine(f"mfx_initiate_{self.__aoi_deque.maxlen-len(self.__aoi_deque)}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
+                        else:
+                            self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
+                            self.setDetLogLine("mfx_initiate", datetime.now().strftime('%Hh%Mm%Ss%fus'))
+                        self.runMFX()
+                        self.setEventsImage(coords_detected)
             # unset busy flag
             self.setBusyFalse()
+
+    def setEventsImage(self, coords):
+        """ Create an image with pixel-marked events in the imspector measurement. """
+        meas = self._imspector.active_measurement()
+        # activate confocal configuration
+        meas.activate(meas.configuration('ov conf'))
+        # create new data stack with same size as confocal
+        meas.create_stack(int, np.roll(np.shape(meas.stack(0).data()),2))
+        # get data stack of newly created stack
+        data = meas.stack(meas.number_of_stacks()-1).data()
+        # add pixels for the detected event coordinates
+        for coord_pair in coords:
+            data[0,0,coord_pair[0],coord_pair[1]] = 1
+        # dilate event positions for visibility
+        kernel = [[False, True, False],[ True, True,  True],[False, True, False]]
+        for _ in range(2):
+            data[0,0] = ndi.binary_dilation(data[0,0], kernel)
+        stack = meas.stack(meas.number_of_stacks()-1)
+        stack.set_name('DetectedEvents')
 
     def bufferLatestImages(self):
         # buffer latest fast frame and save validation images
@@ -615,7 +653,9 @@ class EtMINFLUXController(QtCore.QObject):
         self._imspector.value_at('Minflux/sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
 
     def setMFXDataTag(self, position, roi_size, roi_idx):
-        datatag = 'ROI'+str(roi_idx)+'-Pos['+str(position[0])+','+str(position[1])+']'+'-Size['+str(roi_size[0])+','+str(roi_size[1])+']'
+        datatag = 'ROI'+str(roi_idx)+'-Pos['+str(position[0])+','+str(position[1])+']'+'-Size['+f'{roi_size[0]:.2f}'+','+f'{roi_size[1]:.2f}'+']'
+        if self.__presetRecTime:
+            datatag = datatag + '-RecTime['+str(self.__rec_time_scan)+'s]'
         self._imspector.value_at('Minflux/tag', specpy.ValueTree.Measurement).set(datatag)
 
     def setMFXRecTime(self):
@@ -703,6 +743,7 @@ class EtMINFLUXController(QtCore.QObject):
         meas = self._imspector.active_measurement()
         fileName = path_prefix + '_' + 'minflux' + '.msr'
         filePath = os.path.join(_dataDir, fileName)
+        #TODO Create new image, with events image, in imspector measurement
         meas.save_as(filePath)
 
     def _saveImage(self, img, path_prefix, path_suffix):
