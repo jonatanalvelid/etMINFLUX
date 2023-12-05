@@ -41,9 +41,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.loadPipelineButton = QtWidgets.QPushButton('Load pipeline')
         self.setMFXROICalibrationButton = QtWidgets.QPushButton('Set MFX ROI calib.')
         self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Rep. meas. calib.')
-        # create buttons for calibrating coordinate transform, recording binary mask, loading scan params
+        # create buttons for calibrating coordinate transform, recording binary mask, save current measurement
         self.coordTransfCalibButton = QtWidgets.QPushButton('Transform calibration')
         self.recordBinaryMaskButton = QtWidgets.QPushButton('Record binary mask')
+        self.saveCurrentMeasButton = QtWidgets.QPushButton('Save curr. meas.')
         # creat button for unlocking any softlock happening
         self.setBusyFalseButton = QtWidgets.QPushButton('Unlock softlock')
         # create check box for endless running mode
@@ -53,12 +54,16 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # create check box for pre-setting ROI size
         self.presetROISizeCheck = QtWidgets.QCheckBox('Pre-set ROI size')
         self.presetROISizeCheck.setChecked(True)
+        # create check box for turning on ROI following mode (interleaved conf./MFX in one ROI)
+        self.followROIModeCheck = QtWidgets.QCheckBox('ROI following')
         # create check box for pre-setting MFX acquisition recording time
         self.presetMfxRecTimeCheck = QtWidgets.QCheckBox('Pre-set ROI rec time')
         # create check box for linewise analysis pipeline runs
         self.lineWiseAnalysisCheck = QtWidgets.QCheckBox('Run analysis pipeline linewise')
         # create check box for randomizing ROIs from binary mask
         self.triggerRandomROICheck = QtWidgets.QCheckBox('Random ROI (bin)')
+        # create check box for automatic saving
+        self.autoSaveCheck = QtWidgets.QCheckBox('Auto-save .msr after event')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
         self.bin_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -110,10 +115,20 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
         self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
+        # create editable field for confocal interval for ROI following mode
+        self.follow_roi_interval_label = QtWidgets.QLabel('Confocal interval (s)')
+        self.follow_roi_interval_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.follow_roi_interval_edit = QtWidgets.QLineEdit(str(60))
         # create GUI group titles
         self.timing_title = QtWidgets.QLabel('Timing')
         self.timing_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.timing_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.saving_title = QtWidgets.QLabel('Saving')
+        self.saving_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.saving_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.follow_ROI_mode_title = QtWidgets.QLabel('ROI following mode')
+        self.follow_ROI_mode_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.follow_ROI_mode_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.gui_calibration_title = QtWidgets.QLabel('GUI calibration')
         self.gui_calibration_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.gui_calibration_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
@@ -151,18 +166,15 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.setBusyFalseButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.pipeline_title, currentRow, 0, 1, 2)
-        self.grid.addWidget(self.transform_title, currentRow, 3, 1, 2)
+        self.grid.addWidget(self.transform_title, currentRow, 2, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.loadPipelineButton, currentRow, 0)
         self.grid.addWidget(self.analysisPipelinePar, currentRow, 1)
         self.grid.addWidget(self.transformPipelineLabel, currentRow, 2)
         self.grid.addWidget(self.transformPipelinePar, currentRow, 3)
         self.grid.addWidget(self.coordTransfCalibButton, currentRow, 4)
-        #currentRow += 1
-        #self.grid.addWidget(self.triggerModalityPar_label, currentRow, 2)
-        #self.grid.addWidget(self.triggerModalityPar, currentRow, 3)
         currentRow += 1
-        self.grid.addWidget(self.binary_title, currentRow, 3, 1, 2)
+        self.grid.addWidget(self.binary_title, currentRow, 2, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.bin_smooth_label, currentRow, 2)
         self.grid.addWidget(self.bin_smooth_edit, currentRow, 3)
@@ -171,7 +183,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.bin_thresh_label, currentRow, 2)
         self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
         currentRow += 1
-        self.grid.addWidget(self.minflux_title, currentRow, 3, 1, 2)
+        self.grid.addWidget(self.minflux_title, currentRow, 2, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.mfx_seq_label, currentRow, 2)
         self.grid.addWidget(self.mfx_seq_par, currentRow, 3)
@@ -198,28 +210,34 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.mfx_rectime_edit, currentRow, 3)
         self.grid.addWidget(self.presetMfxRecTimeCheck, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.analysis_control_title, currentRow, 3, 1, 2)
-        currentRow += 1
-        self.grid.addWidget(self.lines_analysis_label, currentRow, 2)
-        self.grid.addWidget(self.lines_analysis_edit, currentRow, 3)
-        self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.init_frames_label, currentRow, 2)
-        self.grid.addWidget(self.init_frames_edit, currentRow, 3)
-        currentRow += 1
-        self.grid.addWidget(self.timing_title, currentRow, 3)
+        self.grid.addWidget(self.analysis_control_title, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.timing_title, currentRow, 2, 1, 2)
         self.grid.addWidget(self.gui_calibration_title, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.lines_analysis_label, currentRow, 0)
+        self.grid.addWidget(self.lines_analysis_edit, currentRow, 1)
         self.grid.addWidget(self.time_sleep_label, currentRow, 2)
         self.grid.addWidget(self.time_sleep_edit, currentRow, 3)
         self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 1)
         self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 2)
         self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 3)
         self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.init_frames_label, currentRow, 0)
+        self.grid.addWidget(self.init_frames_edit, currentRow, 1)
         self.grid.addWidget(self.drag_dur_label, currentRow, 2)
         self.grid.addWidget(self.drag_dur_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.saving_title, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.follow_ROI_mode_title, currentRow, 2, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 0)
+        self.grid.addWidget(self.autoSaveCheck, currentRow, 1)
+        self.grid.addWidget(self.follow_roi_interval_label, currentRow, 2)
+        self.grid.addWidget(self.follow_roi_interval_edit, currentRow, 3)
+        self.grid.addWidget(self.followROIModeCheck, currentRow, 4)        
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -284,6 +302,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_exc_lasers = excLasers
         self.mfx_exc_laser_par.addItems(self.mfx_exc_lasers)
         self.mfx_exc_laser_par.setCurrentIndex(0)
+
+    def setRepeatMeasCalibrationButtonText(self, coords):
+        self.setRepeatMeasCalibrationButton.setText(f'Rep. meas. calib.: [{coords[0]},{coords[1]}]')
+
+    def setMFXROICalibrationButtonText(self, coords):
+        self.setMFXROICalibrationButton.setText(f'Set MFX ROI calib.: [{coords[0]},{coords[1]}]')
 
     def launchHelpWidget(self, widget, init=True):
         """ Launch the help widget. """
