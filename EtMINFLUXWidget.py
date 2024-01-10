@@ -55,7 +55,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.presetROISizeCheck = QtWidgets.QCheckBox('Pre-set ROI size')
         self.presetROISizeCheck.setChecked(True)
         # create check box for turning on ROI following mode (interleaved conf./MFX in one ROI)
-        self.followROIModeCheck = QtWidgets.QCheckBox('ROI following')
+        self.followROIModeCheck = QtWidgets.QCheckBox('ROI following (intermittent confocal)')
+        # create check box for redetecting ROI center in ROI following mode (closest ROI)
+        self.followROIRedetectCheck = QtWidgets.QCheckBox('Redetect ROI center (closest detected coordinate)')
         # create check box for pre-setting MFX acquisition recording time
         self.presetMfxRecTimeCheck = QtWidgets.QCheckBox('Pre-set ROI rec time')
         # create check box for linewise analysis pipeline runs
@@ -64,6 +66,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.triggerRandomROICheck = QtWidgets.QCheckBox('Random ROI (bin)')
         # create check box for automatic saving
         self.autoSaveCheck = QtWidgets.QCheckBox('Auto-save .msr after event')
+        # create check box for plotting ROI even in experiment mode
+        self.plotROICheck = QtWidgets.QCheckBox('Plot ROI (experiment mode)')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
         self.bin_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -108,10 +112,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # time sleeps and drag durations
         self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
         self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.time_sleep_edit = QtWidgets.QLineEdit(str(0.1))
+        self.time_sleep_edit = QtWidgets.QLineEdit(str(0.2))
         self.time_sleep_roiswitch_label = QtWidgets.QLabel('Time sleeps - ROI switch (s)')
         self.time_sleep_roiswitch_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(3))
+        self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(2))
         self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
         self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
@@ -152,6 +156,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
         self.analysisHelpWidget = AnalysisWidget(*args, **kwargs)
+        # help widget for showing coords list
+        self.coordListWidget = CoordListWidget(*args, **kwargs)
+        self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
 
         # create grid and grid layout
         self.grid = QtWidgets.QGridLayout()
@@ -220,6 +227,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.time_sleep_edit, currentRow, 3)
         self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.plotROICheck, currentRow, 0)
         self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 1)
         self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 2)
         self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 3)
@@ -237,7 +245,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.autoSaveCheck, currentRow, 1)
         self.grid.addWidget(self.follow_roi_interval_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_interval_edit, currentRow, 3)
-        self.grid.addWidget(self.followROIModeCheck, currentRow, 4)        
+        self.grid.addWidget(self.followROIModeCheck, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.followROIRedetectCheck, currentRow, 4)
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -369,6 +379,33 @@ class AnalysisWidget(QtWidgets.QWidget):
     def drawROIs(self):
         for roi in self.rois_draw:
             self.imgVb.addItem(roi)
+
+    def addWidgetRight(self, widget):
+        self.grid.addWidget(widget, 1, 6, 1, 1)
+
+
+class CoordListWidget(QtWidgets.QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.list = QtWidgets.QListWidget()
+
+        # generate GUI layout
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        self.grid.addWidget(self.list, 0, 0)
+
+    def addCoords(self, coord_list, roi_sizes):
+        self.clearList()
+        for coord, roi_size in zip(coord_list, roi_sizes):
+            self.addCoord(coord, roi_size)
+
+    def addCoord(self, coord, roi_size):
+        self.list.addItem(f'Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
+
+    def clearList(self):
+        last_item = True
+        while last_item is not None:
+            last_item = self.list.takeItem(0)
 
 
 class CoordTransformWidget(QtWidgets.QWidget):
