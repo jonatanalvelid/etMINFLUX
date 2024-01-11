@@ -238,7 +238,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__confocalLineFrameCurr += 1
         if self.__confocalLineAnalysisCurr == self.__confocalLinesAnalysisPeriod:
             self.__confocalLineAnalysisCurr = 0
-            self.runPipeline()
+            self.analysisPeriodTrigger()
         if self.__confocalLineFrameCurr >= self.__confocalLinesFrame:
             self.__confocalLineFrameCurr = 0
             self.__fast_frame += 1
@@ -263,22 +263,24 @@ class EtMINFLUXController(QtCore.QObject):
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
-        idx = self.__aoi_deque.maxlen-len(self.__aoi_deque)
-        self.setDetLogLine(f"mfx_end_{idx}",datetime.now().strftime('%Hh%Mm%Ss%fus'))
-        print([self.__run_all_aoi, self.__aoi_deque, self.__followingROIMode])
-        if (not self.__run_all_aoi or not self.__aoi_deque) and (not self.__followingROIMode):
+        idx = self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)
+        self.setDetLogLine(f"mfx_end_{idx}", None)
+        print([self.__run_all_aoi, self.__aoi_coords_deque, self.__followingROIMode])
+        if (not self.__run_all_aoi or not self.__aoi_coords_deque) and (not self.__followingROIMode):
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.endExperiment()
             self.continueFastModality()
             self.__fast_frame = 0
         elif self.__run_all_aoi:
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
-            self.newROIMFX(self.__aoi_deque.popleft(), roi_idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
+            self.newROIMFX(self.__aoi_coords_deque.popleft(), roi_idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
         elif self.__followingROIMode:
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.continueFastModality()
 
     def setDetLogLine(self, key, val, *args):
+        if val is None:
+            val = datetime.now().strftime('%Hh%Mm%Ss%fus')
         if args:
             self.__detLog[f"{key}{args[0]}"] = val
         else:
@@ -326,7 +328,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def continueFastModality(self):
         """ Continue the confocal imaging, after a MINFLUX event acquisition has been performed. """
-        if self._widget.endlessScanCheck.isChecked() or (self.__followingROIModeContinue and self.__followingROIMode):
+        if self._widget.endlessScanCheck.isChecked() or self.__followingROIModeContinue:
             time.sleep(self.__sleepTime)
             # connect end of frame signals and start scanning
             self.__confocalLineCurr = 0
@@ -426,184 +428,247 @@ class EtMINFLUXController(QtCore.QObject):
         self.__validating = False
         self.__fast_frame = 0
         self.__post_event_frames = 0
-        self.__aoi_deque = deque(maxlen=0)
+        self.__aoi_coords_deque = deque(maxlen=0)
         self.__aoi_sizes_deque = deque(maxlen=0)
         self.__followingROIModeContinue = False
         if self.recTimeTimer.isActive():
             self.recTimeTimer.stop()
         self.timerThread.quit()
 
-    def runPipeline(self):
-        """ Run the analyis pipeline, called after every fast method frame. """
+    def generateRandomCoord(self, roi_sizes):
+        """ Generate random coord inside the binary mask. """
+        if self.__binary_mask is not None:
+            possible_pixels = np.where(self.__binary_mask==True)
+            rand_idx = np.random.randint(0, len(possible_pixels[0]))
+            random_coords = np.array([[possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]])
+            random_coords = np.flip(random_coords, axis=1)
+            coords_scan = random_coords[0]
+            if not self.__presetROISize:
+                roi_size = roi_sizes[0]
+        else:
+            random_coords = np.array([])
+            roi_size = None
+            coords_scan = None
+        return random_coords, coords_scan, roi_size
+
+    def analysisPeriodTrigger(self):
+        """ Triggers when an analysis period has finished. Depending on experiment modes set: send either to runPipeline, or act in other ways. """
+        # enter if not still running last analysis period trigger
         if not self.__busy:
-            #print('run pipeline start')
-            # if not still running pipeline on last frame
+            # set busy true
+            self.__busy = True
             # get image
             meas = self._imspector.active_measurement()
             self.img = np.squeeze(meas.stack(0).data()[0])
-            self.__busy = True
-            # log start of pipeline
-            pipeline_start_time = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
-            self.setDetLogLine("pipeline_start", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-
-            # run pipeline
-            if self.__runMode == RunMode.TestVisualize or self.__runMode == RunMode.TestValidate:
-                # if chosen a test mode: run pipeline with analysis image return
-                coords_detected, roi_sizes, self.__exinfo, self.img_ana = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
-                                                                        (self.__runMode==RunMode.TestVisualize or
-                                                                        self.__runMode==RunMode.TestValidate),
-                                                                        self.__exinfo, self.__presetROISize, *self.__pipeline_param_vals)
+            # if recording mode is following ROI and we are currently following a ROI
+            if self.__followingROIModeContinue:
+                # if we are redetecting the ROI
+                if self.__followingROIRedetect:
+                    coords_detected, roi_sizes = self.runPipeline()
+                    coords_scan, roi_size = self.postPipelineFollowingROI(coords_detected, roi_sizes)
+                    self.acquireMINFLUXFull(coords_scan, roi_size, logging=False)
+                else:
+                    self.acquireMINFLUXMinimal(pos=self.__roi_center_mfx, roi_size=self.__roi_size_mfx, roi_size_um=self.__roi_size_um_mfx, pos_conf=self.__pos_conf_mfx)
             else:
-                # if chosen experiment mode: run pipeline without analysis image return
-                coords_detected, roi_sizes, self.__exinfo = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
-                                                               self.__runMode==RunMode.TestVisualize,
-                                                               self.__exinfo, self.__presetROISize, *self.__pipeline_param_vals)
-            self.setDetLogLine("pipeline_end", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-            if (self.__followingROIMode and self.__followingROIModeContinue) and not self.__followingROIRedetect:
-                coords_detected = np.array([])
-            if self.__fast_frame > self.__init_frames:
-                #coords_detected = np.flip(coords_detected, axis=1)  #should not be needed, try to do it in pipelines where/if needed instead
                 # if initial settling frames have passed
-                if self.__runMode == RunMode.TestVisualize:
-                    # if visualization mode: set analysis image in help widget
-                    self.setAnalysisHelpImg(self.img_ana)
-                    # plot detected coords in help widget
-                    if self.__random_roi_bin:
-                        # if random roi from binary: disregard analysis result and trigger random pos
-                        if self.__binary_mask is not None:
-                            possible_pixels = np.where(self.__binary_mask==True)
-                            rand_idx = np.random.randint(0, len(possible_pixels[0]))
-                            coords_detected = np.array([[possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]])
-                            coords_detected = np.flip(coords_detected, axis=1)
-                        else:
-                            coords_detected = np.array([])
-                    if coords_detected.size != 0:
-                        self.__analysisHelper.plotScatter(coords_detected, color='g')
-                        self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
-                        self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
-                elif self.__runMode == RunMode.TestValidate:
-                    # if validation mode: set analysis image in help widget, and start to record validation frames after event
-                    self.setAnalysisHelpImg(self.img_ana)
-                    if self.__validating:
-                        # if currently validating
-                        if self.__post_event_frames > self.__validation_frames:
-                            # if all validation frames have been recorded, pause fast imaging, end recording, continue fast imaging
-                            self.saveValidationImages(prev=True, prev_ana=True, path_prefix=pipeline_start_time)
-                            self.__fast_frame = 0
-                            self.pauseFastModality()
-                            self.endExperiment()
-                            self.continueFastModality()
-                            self.__fast_frame = 0
-                            self.__validating = False
-                        self.__post_event_frames += 1
-                    elif coords_detected.size != 0:
-                        # if some events where detected and not validating plot detected coords in help widget
-                        self.__analysisHelper.plotScatter(coords_detected, color='g')
-                        self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
-                        self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
-                        # take first detected coords as event
-                        if np.size(coords_detected) > 2:
-                            coords_scan = coords_detected[0,:]
-                        else:
-                            coords_scan = coords_detected[0]
-                        # log detected center coordinate
-                        self.setDetLogLine("fastscan_x_center", coords_scan[0])
-                        self.setDetLogLine("fastscan_y_center", coords_scan[1])
-                        if not self.__presetROISize:
-                            roi_size = roi_sizes[0]
-                        # flag for start of validation
-                        self.__validating = True
-                        self.__post_event_frames = 0
-                elif self.__runMode == RunMode.Experiment:
+                if self.__fast_frame > self.__init_frames:
+                    coords_detected, roi_sizes = self.runPipeline()
+                    # if visualization mode
+                    if self.__runMode == RunMode.TestVisualize:
+                        self.postPipelineVisualize(coords_detected, roi_sizes)
+                    # if validation mode
+                    elif self.__runMode == RunMode.TestValidate:
+                        self.postPipelineValidate(coords_detected, roi_sizes)
                     # if experiment mode
-                    random_coords_ready = False
-                    if self.__random_roi_bin:
-                        # if random roi from binary: disregard analysis result and trigger random pos
-                        if self.__binary_mask is not None:
-                            possible_pixels = np.where(self.__binary_mask==True)
-                            rand_idx = np.random.randint(0, len(possible_pixels[0]))
-                            coords_detected = np.array([[possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]])
-                            coords_detected = np.flip(coords_detected, axis=1)
-                            coords_scan = coords_detected[0]
-                            random_coords_ready = True
-                            if not self.__presetROISize:
-                                roi_size = roi_sizes[0]
-                        else:
-                            coords_detected = np.array([])
-                            coords_scan = None
-                    elif coords_detected.size != 0:
-                        # if some events were detected
-                        if self.__run_all_aoi:
-                            # use all detected coords as events
-                            areas_of_interest = list()
-                            if np.size(coords_detected) > 2:
-                                for pair in coords_detected:
-                                    areas_of_interest.append(pair)
-                            else:
-                                areas_of_interest.append(coords_detected[0])
-                            self.__aoi_deque = deque(areas_of_interest, maxlen=len(areas_of_interest))
-                            coords_scan = self.__aoi_deque.popleft()
-                            if not self.__presetROISize:
-                                self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
-                                roi_size = self.__aoi_sizes_deque.popleft()
-                            self._widget.initiateButton.setText('Next ROI')
-                        else:
-                            # take first detected coords as event
-                            if np.size(coords_detected) > 2:
-                                coords_scan = coords_detected[0,:]
-                            else:
-                                coords_scan = coords_detected[0]
-                            if not self.__presetROISize:
-                                roi_size = roi_sizes[0]
-                    if random_coords_ready or coords_detected.size != 0:
+                    elif self.__runMode == RunMode.Experiment:
+                        coords_detected, coords_scan, roi_size = self.postPipelineExperiment(coords_detected, roi_sizes)
+                        # move on with triggering modality switch, if we have detected or randomized coords
                         if coords_scan is not None:
-                            ### TODO: NEED TO PUT SOMETHING IN HERE FOR ROI FOLLOWING MODE, WHERE I COMPARE THE DETECTED COORDINATES HERE WITH
-                            # THE COORDINATE I AM FOLLOWING (if self.__followingROIRedetect==True, OTHERWISE JUST TAKE THE SAME COORDINATE AS BEFORE).
-                            # if some events were detected or if we are getting randomized positions from binary
-                            # invert pixel position
-                            self.setDetLogLine("prepause", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                            # pause fast imaging
-                            self.pauseFastModality()
-                            self.setDetLogLine("coord_transf_start", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                            # transform detected coordinate between from pixels to sample position in um (for conf --> MFX)
-                            coords_center_scan, coords_center_um, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
-                            if self.__presetROISize:
-                                roi_size_scan = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
-                                roi_size_um_scan = roi_size_scan
-                            else:
-                                coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
-                                coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
-                                roi_size_scan = np.subtract(coord_top, coord_bot)
-                                roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
-                            if self.__presetRecTime:
-                                self.__rec_time_scan = float(self._widget.mfx_rectime_edit.text())
-                            else:
-                                self.__rec_time_scan = None
-                            # initiate and run scanning with transformed center coordinate
-                            self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
-                            # log detected and scanning center coordinate
-                            if self.__run_all_aoi:
-                                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_deque.maxlen-len(self.__aoi_deque))
-                                self.setDetLogLine(f"mfx_initiate_{self.__aoi_deque.maxlen-len(self.__aoi_deque)}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                            else:
-                                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
-                                self.setDetLogLine("mfx_initiate", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-                            self.runMFX()
-                            self.setEventsImage(coords_detected)
-                            if self.__plotROI:
-                                # set analysis image in help widget and plot detected coords in help widget
-                                self.setAnalysisHelpImg(self.img_ana)
-                                self.__analysisHelper.plotScatter(coords_detected, color='g')
-                                self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
-                                self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
-                    elif (self.__followingROIMode and self.__followingROIModeContinue) and not self.__followingROIRedetect:
-                        # pause fast imaging
-                        self.pauseFastModality()
-                        # initiate and run scanning
-                        self.initiateMFX(position=self.__roi_center_mfx, ROI_size=self.__roi_size_mfx, ROI_size_um=self.__roi_size_um_mfx, pos_conf=self.__pos_conf_mfx)
-                        self.runMFX()
+                            self.acquireMINFLUXFull(coords_scan, roi_size)
+                            self.helpImageGeneration(coords_detected, roi_sizes)
             # unset busy flag
             self.setBusyFalse()
+
+    def runPipeline(self):
+        """ Run the analyis pipeline on the latest confocal analysis period frame. """
+        # start of pipeline
+        self.__pipeline_start_file_prefix = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
+        # run pipeline
+        self.setDetLogLine("pipeline_start", None)
+        if self.__runMode == RunMode.TestVisualize or self.__runMode == RunMode.TestValidate:
+            # if test mode: run pipeline w/ analysis image return
+            coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.__prevFrames,self.__binary_mask,
+                                                                                    (self.__runMode==RunMode.TestVisualize or
+                                                                                    self.__runMode==RunMode.TestValidate),
+                                                                                    self.__exinfo, self.__presetROISize,
+                                                                                    *self.__pipeline_param_vals)
+        else:
+            # if experiment mode: run pipeline w/o analysis image return
+            coords_detected, roi_sizes, self.__exinfo = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
+                                                                    self.__runMode==RunMode.TestVisualize,
+                                                                    self.__exinfo, self.__presetROISize,
+                                                                    *self.__pipeline_param_vals)
+        self.setDetLogLine("pipeline_end", None)
+        return coords_detected, roi_sizes
+
+    def postPipelineVisualize(self, coords_detected, roi_sizes):
+        """ Called if in visualization mode, and plots the coordinates and adds them to the coords list in the helper widget. Generates random coords if selected. """
+        # set analysis image in help widget
+        self.setAnalysisHelpImg(self.__img_ana)
+        # if random roi(s) from binary
+        if self.__random_roi_bin:
+            coords_detected, _, _ = self.generateRandomCoord(roi_sizes)
+        # if we have some detected or randomized coords
+        if coords_detected.size != 0:
+            # plot detected coords in help widget
+            self.__analysisHelper.plotScatter(coords_detected, color='g')
+            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
+
+    def postPipelineValidate(self, coords_detected, roi_sizes):
+        """ Called if in validation mode, and initiates validation run or takes care of validation run when finishing. """
+        # set analysis image in help widget, and start to record validation frames after event
+        self.setAnalysisHelpImg(self.__img_ana)
+        # if currently running validation
+        if self.__validating:
+            if self.__post_event_frames > self.__validation_frames:
+                # if all validation frames have been recorded, pause fast imaging, end recording, continue fast imaging
+                self.saveValidationImages(prev=True, prev_ana=True, path_prefix=self.__pipeline_start_file_prefix)
+                self.__fast_frame = 0
+                self.pauseFastModality()
+                self.endExperiment()
+                self.continueFastModality()
+                self.__fast_frame = 0
+                self.__validating = False
+            self.__post_event_frames += 1
+        # initiate validation
+        elif coords_detected.size != 0:
+            # if some events where detected and not validating plot detected coords in help widget
+            self.__analysisHelper.plotScatter(coords_detected, color='g')
+            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
+            # take first detected coords as event
+            if np.size(coords_detected) > 2:
+                coords_scan = coords_detected[0,:]
+            else:
+                coords_scan = coords_detected[0]
+            # log detected center coordinate
+            self.setDetLogLine("fastscan_x_center", coords_scan[0])
+            self.setDetLogLine("fastscan_y_center", coords_scan[1])
+            # flag for start of validation
+            self.__validating = True
+            self.__post_event_frames = 0
+
+    def postPipelineExperiment(self, coords_detected, roi_sizes):
+        """ Called if in experiment mode, and returns MINFLUX scan coordinates according to GUI settings, detected or random. """
+        # if to generate random roi(s) from binary (flag: __random_roi_bin)
+        if self.__random_roi_bin:
+            coords_detected, coords_scan, roi_size = self.generateRandomCoord(roi_sizes)
+        # else handle detected coordinates, if some events were detected
+        elif coords_detected.size != 0:
+            # if we want to run all detected ROIs (flag: __run_all_roi)
+            if self.__run_all_aoi:
+                # prep deques for coords and ROI sizes
+                areas_of_interest = list()
+                if np.size(coords_detected) > 2:
+                    for pair in coords_detected:
+                        areas_of_interest.append(pair)
+                else:
+                    areas_of_interest.append(coords_detected[0])
+                self.__aoi_coords_deque = deque(areas_of_interest, maxlen=len(areas_of_interest))
+                coords_scan = self.__aoi_coords_deque.popleft()
+                # if we do not preset ROI size, also make a deque for the detected roi_sizes
+                if not self.__presetROISize:
+                    self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
+                    roi_size = self.__aoi_sizes_deque.popleft()
+                self._widget.initiateButton.setText('Next ROI')
+            else:
+                # take first detected coord (and roi_size if applicable) as event
+                if np.size(coords_detected) > 2:
+                    coords_scan = coords_detected[0,:]
+                else:
+                    coords_scan = coords_detected[0]
+                if not self.__presetROISize:
+                    roi_size = roi_sizes[0]
+                else:
+                    roi_size = None
+        else:
+            ### TODO: have to check if this is correct null-returning if we do not have any detected or random coordinates. Could be that I can return None, None for coords_scan and roi_size as well.
+            coords_detected = np.array([])
+            coords_scan = np.array([])
+            roi_size = np.array([])
+        return coords_detected, coords_scan, roi_size
+
+    def postPipelineFollowingROI(self, coords_detected, roi_sizes):
+        """ Called if in experiment mode and following ROI mode and following ROI redetection mode, and returns MINFLUX scan coordinates according to GUI settings. """
+        if coords_detected.size != 0:
+            # TODO Check if some detected coordinate is close to the previous one, by calculating distance from old to all detected ones
+            # TODO If one detected is inside some reasonable range, use this as the new position and roi_size, and return these new values
+
+            # take first detected coord (and roi_size if applicable) as event
+            if np.size(coords_detected) > 2:
+                coords_scan = coords_detected[0,:]
+            else:
+                coords_scan = coords_detected[0]
+            if not self.__presetROISize:
+                roi_size = roi_sizes[0]
+        return coords_scan, roi_size
+
+    def acquireMINFLUXMinimal(self, pos, roi_size, roi_size_um, pos_conf):
+        """ Minimal MINFLUX acquisition function. """
+        # pause fast imaging
+        self.pauseFastModality()
+        # initiate and run scanning
+        self.initiateMFX(position=pos, ROI_size=roi_size, ROI_size_um=roi_size_um, pos_conf=pos_conf)
+        self.startMFX()
+
+    def acquireMINFLUXFull(self, coords_scan, roi_size, logging=True):
+        """ Full MINFLUX acquisition function. """
+        if logging:
+            self.setDetLogLine("prepause", None)
+        # pause fast imaging
+        self.pauseFastModality()
+        if logging:
+            self.setDetLogLine("coord_transf_start", None)
+        # transform detected coordinate between from pixels to sample position in um (for conf --> MFX)
+        coords_center_scan, coords_center_um, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
+        # get roi size in um from preset values
+        if self.__presetROISize:
+            roi_size_scan = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
+            roi_size_um_scan = roi_size_scan
+        # or calculate roi size in um from in confocal image pixels
+        else:
+            coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
+            coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
+            roi_size_scan = np.subtract(coord_top, coord_bot)
+            roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
+        # get preset recording time, if set
+        if self.__presetRecTime:
+            self.__rec_time_scan = float(self._widget.mfx_rectime_edit.text())
+        # else run indefinitely
+        else:
+            self.__rec_time_scan = None
+        # initiate and run scanning with transformed center coordinate
+        self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
+        if logging:
+            # log detected and scanning center coordinate, with different keys if running all ROIs or only one
+            if self.__run_all_aoi:
+                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
+                self.setDetLogLine(f"mfx_initiate_{self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)}", None)
+            else:
+                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
+                self.setDetLogLine("mfx_initiate", None)
+        self.startMFX()
+
+    def helpImageGeneration(self, coords_detected, roi_sizes):
+        """ Called after starting MINFLUX acquisition, if some additional info regarding detected coordinates should be viewed/saved. """
+        self.setEventsImage(coords_detected)
+        if self.__plotROI:
+            # set analysis image in help widget and plot detected coords in help widget
+            self.setAnalysisHelpImg(self.__img_ana)
+            self.__analysisHelper.plotScatter(coords_detected, color='g')
+            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
 
     def setEventsImage(self, coords):
         """ Create an image with pixel-marked events in the imspector measurement. """
@@ -630,7 +695,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__prevFrames.append(np.copy(self.img))
         if self.__runMode == RunMode.TestValidate:
             # if validation mode: buffer previous preprocessed analysis frame
-            self.__prevAnaFrames.append(self.img_ana)
+            self.__prevAnaFrames.append(self.__img_ana)
 
     def newROIMFX(self, coords_scan, roi_idx):
         # switch active Imspector window to conf overview
@@ -659,8 +724,8 @@ class EtMINFLUXController(QtCore.QObject):
             self.__rec_time_scan = None
         # initiate and run scanning with transformed center coordinate
         self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
-        self.setDetLogLine(f"mfx_initiate_{roi_idx}", datetime.now().strftime('%Hh%Mm%Ss%fus'))
-        self.runMFX()
+        self.setDetLogLine(f"mfx_initiate_{roi_idx}", None)
+        self.startMFX()
 
     def logCoordinates(self, coords_scan, coords_center_scan, roi_size, idx=None):
         """ Log detection and scan coordinates. """
@@ -701,7 +766,7 @@ class EtMINFLUXController(QtCore.QObject):
         elif self.__presetRecTime:
             self.setMFXRecTime()
             self.startRecTimer()
-        self.setMFXDataTag(pos_conf, ROI_size_um, self.__aoi_deque.maxlen-len(self.__aoi_deque))
+        self.setMFXDataTag(pos_conf, ROI_size_um, self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
         self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
         time.sleep(self.__sleepTime)
 
@@ -778,7 +843,7 @@ class EtMINFLUXController(QtCore.QObject):
         mouse.move(*self.__set_MFXROI_button_pos)
         mouse.click()
 
-    def runMFX(self):
+    def startMFX(self):
         """ Run event-triggered MINFLUX acquisition in small ROI. """
         self._imspector.start()
         self.__runningMFX = True
@@ -814,11 +879,9 @@ class EtMINFLUXController(QtCore.QObject):
     def saveValidationImages(self, prev=True, prev_ana=True, path_prefix='YMD-HMS'):
         """ Save the validation fast images of an event detection, fast images and/or preprocessed analysis images. """
         if prev:
-            #print(f'Length of prev frames: {len(self.__prevFrames)}')
             self._saveImage(self.__prevFrames, path_prefix, 'conf-raw')
             self.__prevFrames.clear()
         if prev_ana:
-            #print(f'Length of prev_ana frames: {len(self.__prevAnaFrames)}')
             self._saveImage(self.__prevAnaFrames, path_prefix, 'conf-ana')
             self.__prevAnaFrames.clear()
 
