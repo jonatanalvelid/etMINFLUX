@@ -5,6 +5,7 @@ import importlib
 import enum
 import warnings
 import time
+import math
 import specpy
 import mouse
 import threading
@@ -449,6 +450,7 @@ class EtMINFLUXController(QtCore.QObject):
             random_coords = np.array([])
             roi_size = None
             coords_scan = None
+        self.__coords_scan_curr = coords_scan
         return random_coords, coords_scan, roi_size
 
     def analysisPeriodTrigger(self):
@@ -466,7 +468,12 @@ class EtMINFLUXController(QtCore.QObject):
                 if self.__followingROIRedetect:
                     coords_detected, roi_sizes = self.runPipeline()
                     coords_scan, roi_size = self.postPipelineFollowingROI(coords_detected, roi_sizes)
-                    self.acquireMINFLUXFull(coords_scan, roi_size, logging=False)
+                    if coords_scan is not None:
+                        ### TODO: have to check that this check is True if we have coords_scan = np.array([]), otherwise change null-return
+                        self.acquireMINFLUXFull(coords_scan, roi_size, logging=False)
+                    else:
+                        # end experiment, as we no longer have anything to follow, and we cannot suddenly "find it back" again in the next image
+                        self.endFollowingROIExperiment()
                 else:
                     self.acquireMINFLUXMinimal(pos=self.__roi_center_mfx, roi_size=self.__roi_size_mfx, roi_size_um=self.__roi_size_um_mfx, pos_conf=self.__pos_conf_mfx)
             else:
@@ -597,21 +604,42 @@ class EtMINFLUXController(QtCore.QObject):
             coords_detected = np.array([])
             coords_scan = np.array([])
             roi_size = np.array([])
+        self.__coords_scan_curr = coords_scan
         return coords_detected, coords_scan, roi_size
 
     def postPipelineFollowingROI(self, coords_detected, roi_sizes):
         """ Called if in experiment mode and following ROI mode and following ROI redetection mode, and returns MINFLUX scan coordinates according to GUI settings. """
+        thresh_dist = 10
+        # if we have any newly detected coordinates
         if coords_detected.size != 0:
-            # TODO Check if some detected coordinate is close to the previous one, by calculating distance from old to all detected ones
-            # TODO If one detected is inside some reasonable range, use this as the new position and roi_size, and return these new values
-
-            # take first detected coord (and roi_size if applicable) as event
-            if np.size(coords_detected) > 2:
-                coords_scan = coords_detected[0,:]
+            min_dist = 1e10
+            min_idx = -1
+            # check distance to old saved coordinate for all newly detected coordinates
+            for idx, coord_new in enumerate(coords_detected):
+                dist = math.dist(self.__coords_scan_curr, coord_new)
+                if dist < min_dist:
+                    min_dist = dist
+                    min_idx = idx
+            # if the nearest new coordinate is below threshold, consider that our coordinate that has moved
+            if min_dist < thresh_dist:
+                if np.size(coords_detected) > 2:
+                    coords_scan = coords_detected[min_idx,:]
+                else:
+                    coords_scan = coords_detected[min_idx]
+                if not self.__presetROISize:
+                    roi_size = roi_sizes[min_idx]
+            # else do not consider that we have a valid coordinate
             else:
-                coords_scan = coords_detected[0]
-            if not self.__presetROISize:
-                roi_size = roi_sizes[0]
+                ### TODO: have to check if this is correct null-returning if we do not have any detected or random coordinates. Could be that I can return None, None for coords_scan and roi_size as well.
+                coords_detected = np.array([])
+                coords_scan = np.array([])
+                roi_size = np.array([])
+        else:
+            ### TODO: have to check if this is correct null-returning if we do not have any detected or random coordinates. Could be that I can return None, None for coords_scan and roi_size as well.
+            coords_detected = np.array([])
+            coords_scan = np.array([])
+            roi_size = np.array([])
+        self.__coords_scan_curr = coords_scan
         return coords_scan, roi_size
 
     def acquireMINFLUXMinimal(self, pos, roi_size, roi_size_um, pos_conf):
@@ -659,6 +687,15 @@ class EtMINFLUXController(QtCore.QObject):
                 self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
                 self.setDetLogLine("mfx_initiate", None)
         self.startMFX()
+
+    def endFollowingROIExperiment(self):
+        """ End experiment after a recalculated following ROI was not detected. """
+        # TODO: check that this is the correct order and enough things to end the experiment properly
+        self.pauseFastModality()
+        self.endExperiment()
+        self.__followingROIModeContinue = False
+        self.continueFastModality()
+        # TODO: Might need to add a way to end following ROI properly also if it goes on forever, is clicking the stop button really enough to make it save all data and so?
 
     def helpImageGeneration(self, coords_detected, roi_sizes):
         """ Called after starting MINFLUX acquisition, if some additional info regarding detected coordinates should be viewed/saved. """
