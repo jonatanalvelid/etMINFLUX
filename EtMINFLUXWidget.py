@@ -395,9 +395,17 @@ class CoordListWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.list, 0, 0)
 
     def addCoords(self, coord_list, roi_sizes):
+        print('hey')
         self.clearList()
+        print('hey2')
+        print(coord_list)
+        print(roi_sizes)
         for coord, roi_size in zip(coord_list, roi_sizes):
+            print(coord)
+            print(roi_size)
             self.addCoord(coord, roi_size)
+            print('hey3')
+            print(coord)
 
     def addCoord(self, coord, roi_size):
         self.list.addItem(f'Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')

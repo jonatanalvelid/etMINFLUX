@@ -23,12 +23,12 @@ import pyqtgraph as pg
 
 warnings.filterwarnings("ignore")
 
-#_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
-#_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
-#_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
-_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
-_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
+_logsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'logs')
+_dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
+_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+#_logsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'logs')
+#_dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
+#_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
 def thread_info(msg):
     print(msg, int(QtCore.QThread.currentThreadId()), threading.current_thread().name)
@@ -143,9 +143,9 @@ class EtMINFLUXController(QtCore.QObject):
         #self.__set_MFXROI_button_pos = [652,65]
         #self.__set_repeat_meas_button_pos = [407,65]
         # lab default
-        self.__set_MFXROI_button_pos = [1613,75]
+        self.__set_MFXROI_button_pos = [1712,72]
         self._widget.setMFXROICalibrationButtonText(self.__set_MFXROI_button_pos)
-        self.__set_repeat_meas_button_pos = [1378,75]
+        self.__set_repeat_meas_button_pos = [1479,72]
         self._widget.setRepeatMeasCalibrationButtonText(self.__set_repeat_meas_button_pos)
 
     def getTimings(self):
@@ -446,6 +446,8 @@ class EtMINFLUXController(QtCore.QObject):
             coords_scan = random_coords[0]
             if not self.__presetROISize:
                 roi_size = roi_sizes[0]
+            else:
+                roi_size = None
         else:
             random_coords = np.array([])
             roi_size = None
@@ -468,8 +470,7 @@ class EtMINFLUXController(QtCore.QObject):
                 if self.__followingROIRedetect:
                     coords_detected, roi_sizes = self.runPipeline()
                     coords_scan, roi_size = self.postPipelineFollowingROI(coords_detected, roi_sizes)
-                    if coords_scan is not None:
-                        ### TODO: have to check that this check is True if we have coords_scan = np.array([]), otherwise change null-return
+                    if len(coords_scan)>0:
                         self.acquireMINFLUXFull(coords_scan, roi_size, logging=False)
                     else:
                         # end experiment, as we no longer have anything to follow, and we cannot suddenly "find it back" again in the next image
@@ -490,7 +491,7 @@ class EtMINFLUXController(QtCore.QObject):
                     elif self.__runMode == RunMode.Experiment:
                         coords_detected, coords_scan, roi_size = self.postPipelineExperiment(coords_detected, roi_sizes)
                         # move on with triggering modality switch, if we have detected or randomized coords
-                        if coords_scan is not None:
+                        if len(coords_scan)>0:
                             self.acquireMINFLUXFull(coords_scan, roi_size)
                             self.helpImageGeneration(coords_detected, roi_sizes)
             # unset busy flag
@@ -504,7 +505,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.setDetLogLine("pipeline_start", None)
         if self.__runMode == RunMode.TestVisualize or self.__runMode == RunMode.TestValidate:
             # if test mode: run pipeline w/ analysis image return
-            coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.__prevFrames,self.__binary_mask,
+            coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
                                                                                     (self.__runMode==RunMode.TestVisualize or
                                                                                     self.__runMode==RunMode.TestValidate),
                                                                                     self.__exinfo, self.__presetROISize,
@@ -530,6 +531,8 @@ class EtMINFLUXController(QtCore.QObject):
             # plot detected coords in help widget
             self.__analysisHelper.plotScatter(coords_detected, color='g')
             self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            if self.__presetROISize:
+                roi_sizes = self.getPresetRoiSize(len(coords_detected))
             self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
 
     def postPipelineValidate(self, coords_detected, roi_sizes):
@@ -553,6 +556,8 @@ class EtMINFLUXController(QtCore.QObject):
             # if some events where detected and not validating plot detected coords in help widget
             self.__analysisHelper.plotScatter(coords_detected, color='g')
             self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            if self.__presetROISize:
+                roi_sizes = self.getPresetRoiSize(len(coords_detected))
             self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
             # take first detected coords as event
             if np.size(coords_detected) > 2:
@@ -588,6 +593,8 @@ class EtMINFLUXController(QtCore.QObject):
                 if not self.__presetROISize:
                     self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
                     roi_size = self.__aoi_sizes_deque.popleft()
+                else:
+                    roi_size = None
                 self._widget.initiateButton.setText('Next ROI')
             else:
                 # take first detected coord (and roi_size if applicable) as event
@@ -600,7 +607,6 @@ class EtMINFLUXController(QtCore.QObject):
                 else:
                     roi_size = None
         else:
-            ### TODO: have to check if this is correct null-returning if we do not have any detected or random coordinates. Could be that I can return None, None for coords_scan and roi_size as well.
             coords_detected = np.array([])
             coords_scan = np.array([])
             roi_size = np.array([])
@@ -630,12 +636,10 @@ class EtMINFLUXController(QtCore.QObject):
                     roi_size = roi_sizes[min_idx]
             # else do not consider that we have a valid coordinate
             else:
-                ### TODO: have to check if this is correct null-returning if we do not have any detected or random coordinates. Could be that I can return None, None for coords_scan and roi_size as well.
                 coords_detected = np.array([])
                 coords_scan = np.array([])
                 roi_size = np.array([])
         else:
-            ### TODO: have to check if this is correct null-returning if we do not have any detected or random coordinates. Could be that I can return None, None for coords_scan and roi_size as well.
             coords_detected = np.array([])
             coords_scan = np.array([])
             roi_size = np.array([])
@@ -699,13 +703,20 @@ class EtMINFLUXController(QtCore.QObject):
 
     def helpImageGeneration(self, coords_detected, roi_sizes):
         """ Called after starting MINFLUX acquisition, if some additional info regarding detected coordinates should be viewed/saved. """
+        print(1)
         self.setEventsImage(coords_detected)
+        print(2)
         if self.__plotROI:
+            print(3)
             # set analysis image in help widget and plot detected coords in help widget
-            self.setAnalysisHelpImg(self.__img_ana)
+            self.setAnalysisHelpImg(self.img)
             self.__analysisHelper.plotScatter(coords_detected, color='g')
             self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            print(4)
+            if self.__presetROISize:
+                roi_sizes = self.getPresetRoiSize(len(coords_detected))
             self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
+            print(5)
 
     def setEventsImage(self, coords):
         """ Create an image with pixel-marked events in the imspector measurement. """
@@ -803,6 +814,8 @@ class EtMINFLUXController(QtCore.QObject):
         elif self.__presetRecTime:
             self.setMFXRecTime()
             self.startRecTimer()
+        else:
+            self.setMFXRecTime(0)
         self.setMFXDataTag(pos_conf, ROI_size_um, self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
         self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
         time.sleep(self.__sleepTime)
@@ -987,6 +1000,12 @@ class EtMINFLUXController(QtCore.QObject):
 
     def getTransformCoeffs(self):
         return self.__transformCoeffs
+    
+    def getPresetRoiSize(self, length):
+        roi_sizes = []
+        for _ in range(length):
+            roi_sizes.append([float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())])
+        return roi_sizes
 
 
 class AnalysisImgHelper():
