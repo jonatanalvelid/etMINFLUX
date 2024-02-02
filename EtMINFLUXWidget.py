@@ -20,11 +20,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.transformPipelinePar = QtWidgets.QComboBox()
         self.transformPipelineLabel = QtWidgets.QLabel('Transform pipeline')
         self.transformPipelineLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        ## generate dropdown list for trigger modalities
-        #self.triggerModality = list()
-        #self.triggerModalityPar = QtWidgets.QComboBox()
-        #self.triggerModalityPar_label = QtWidgets.QLabel('Trigger modality')
-        #self.triggerModalityPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         # add all experiment modes in a dropdown list
         self.experimentModes = ['Experiment','TestVisualize','TestValidate']
         self.experimentModesPar = QtWidgets.QComboBox()
@@ -32,6 +27,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.experimentModesPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.experimentModesPar.addItems(self.experimentModes)
         self.experimentModesPar.setCurrentIndex(0)
+        # generate dropdown list for ROI following modes
+        self.roiFollowingModes = ['Single','Multiple','SingleRedetect']
+        self.roiFollowingModesPar = QtWidgets.QComboBox()
+        self.roiFollowingModesPar_label = QtWidgets.QLabel('ROI following mode')
+        self.roiFollowingModesPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.roiFollowingModesPar.addItems(self.roiFollowingModes)
+        self.roiFollowingModesPar.setCurrentIndex(0)
         # create lists for current pipeline parameters: labels and editable text fields
         self.param_names = list()
         self.param_edits = list()
@@ -56,16 +58,16 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.presetROISizeCheck.setChecked(True)
         # create check box for turning on ROI following mode (interleaved conf./MFX in one ROI)
         self.followROIModeCheck = QtWidgets.QCheckBox('ROI following (intermittent confocal)')
-        # create check box for redetecting ROI center in ROI following mode (closest ROI)
-        self.followROIRedetectCheck = QtWidgets.QCheckBox('Redetect ROI center (closest detected coordinate)')
         # create check box for pre-setting MFX acquisition recording time
         self.presetMfxRecTimeCheck = QtWidgets.QCheckBox('Pre-set ROI rec time')
+        self.presetMfxRecTimeCheck.setChecked(True)
         # create check box for linewise analysis pipeline runs
         self.lineWiseAnalysisCheck = QtWidgets.QCheckBox('Run analysis pipeline linewise')
         # create check box for randomizing ROIs from binary mask
         self.triggerRandomROICheck = QtWidgets.QCheckBox('Random ROI (bin)')
         # create check box for automatic saving
         self.autoSaveCheck = QtWidgets.QCheckBox('Auto-save .msr after event')
+        self.autoSaveCheck.setChecked(True)
         # create check box for plotting ROI even in experiment mode
         self.plotROICheck = QtWidgets.QCheckBox('Plot ROI (experiment mode)')
         # create editable fields for binary mask calculation threshold and smoothing
@@ -112,7 +114,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # time sleeps and drag durations
         self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
         self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.time_sleep_edit = QtWidgets.QLineEdit(str(0.2))
+        self.time_sleep_edit = QtWidgets.QLineEdit(str(0.3))
         self.time_sleep_roiswitch_label = QtWidgets.QLabel('Time sleeps - ROI switch (s)')
         self.time_sleep_roiswitch_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(2))
@@ -246,13 +248,15 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 0)
         self.grid.addWidget(self.autoSaveCheck, currentRow, 1)
+        self.grid.addWidget(self.roiFollowingModesPar_label, currentRow, 2)
+        self.grid.addWidget(self.roiFollowingModesPar, currentRow, 3)
+        self.grid.addWidget(self.followROIModeCheck, currentRow, 4)
+        currentRow += 1
         self.grid.addWidget(self.follow_roi_interval_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_interval_edit, currentRow, 3)
-        self.grid.addWidget(self.followROIModeCheck, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.follow_roi_redetectthresh_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_redetectthresh_edit, currentRow, 3)
-        self.grid.addWidget(self.followROIRedetectCheck, currentRow, 4)
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -299,12 +303,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
                 self.transformPipelines.append(transform)
         self.transformPipelinePar.addItems(self.transformPipelines)
         self.transformPipelinePar.setCurrentIndex(0)
-
-    #def setTriggerModalityList(self, modalityNames):
-    #    """ Set combobox with available trigger modalities to use. """
-    #    self.triggerModalities = modalityNames
-    #    self.triggerModalityPar.addItems(self.triggerModalities)
-    #    self.triggerModalityPar.setCurrentIndex(0)
 
     def setMfxSequenceList(self, mfxSeqs):
         """ Set combobox with available minflux sequences to use. """
@@ -382,8 +380,11 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.rois_draw = []
 
     def removeROI(self, idx):
-        self.imgVb.removeItem(self.rois_draw[idx])
-        del self.rois_draw[idx]
+        try:
+            self.imgVb.removeItem(self.rois_draw[idx])
+            del self.rois_draw[idx]
+        except:
+            pass
 
     def drawROIs(self):
         for roi in self.rois_draw:
