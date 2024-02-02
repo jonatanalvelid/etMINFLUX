@@ -119,10 +119,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
         self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
-        # create editable field for confocal interval for ROI following mode
+        # create editable fields for ROI following mode
         self.follow_roi_interval_label = QtWidgets.QLabel('Confocal interval (s)')
         self.follow_roi_interval_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.follow_roi_interval_edit = QtWidgets.QLineEdit(str(60))
+        self.follow_roi_redetectthresh_label = QtWidgets.QLabel('Redetect dist threshold (px)')
+        self.follow_roi_redetectthresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.follow_roi_redetectthresh_edit = QtWidgets.QLineEdit(str(20))
         # create GUI group titles
         self.timing_title = QtWidgets.QLabel('Timing')
         self.timing_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
@@ -247,6 +250,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.follow_roi_interval_edit, currentRow, 3)
         self.grid.addWidget(self.followROIModeCheck, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.follow_roi_redetectthresh_label, currentRow, 2)
+        self.grid.addWidget(self.follow_roi_redetectthresh_edit, currentRow, 3)
         self.grid.addWidget(self.followROIRedetectCheck, currentRow, 4)
 
     def initParamFields(self, parameters: dict, params_exclude: list):
@@ -376,6 +381,10 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.imgVb.removeItem(roi)
         self.rois_draw = []
 
+    def removeROI(self, idx):
+        self.imgVb.removeItem(self.rois_draw[idx])
+        del self.rois_draw[idx]
+
     def drawROIs(self):
         for roi in self.rois_draw:
             self.imgVb.addItem(roi)
@@ -389,26 +398,27 @@ class CoordListWidget(QtWidgets.QWidget):
         super().__init__(*args, **kwargs)
         self.list = QtWidgets.QListWidget()
 
+        # create buttons for control of the ROI list
+        self.delROIButton = QtWidgets.QPushButton('Delete ROI')
+
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
-        self.grid.addWidget(self.list, 0, 0)
+        self.grid.addWidget(self.delROIButton, 0, 0)
+        self.grid.addWidget(self.list, 1, 0)
 
-    def addCoords(self, coord_list, roi_sizes):
-        print('hey')
+    def addCoords(self, coord_list, roi_sizes, colors):
         self.clearList()
-        print('hey2')
-        print(coord_list)
-        print(roi_sizes)
-        for coord, roi_size in zip(coord_list, roi_sizes):
-            print(coord)
-            print(roi_size)
-            self.addCoord(coord, roi_size)
-            print('hey3')
-            print(coord)
+        for coord, roi_size, color in zip(coord_list, roi_sizes, colors):
+            self.addCoord(coord, roi_size, color)
 
-    def addCoord(self, coord, roi_size):
-        self.list.addItem(f'Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
+    def addCoord(self, coord, roi_size, color):
+        listitem = QtWidgets.QListWidgetItem(f'Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
+        #listitem.setForeground(color)  # TODO: this does not work, find out how to change text color
+        self.list.addItem(listitem)
+
+    def deleteCoord(self, idx):
+        self.list.takeItem(0)
 
     def clearList(self):
         last_item = True

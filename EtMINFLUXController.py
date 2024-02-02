@@ -94,6 +94,8 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.followROIModeCheck.clicked.connect(self.toggleFollowingROIMode)
         self._widget.followROIRedetectCheck.clicked.connect(self.toggleRedetectROIMode)
 
+        self._widget.coordListWidget.delROIButton.clicked.connect(self.deleteROI)
+
         # create timer for fixed recording time syncing
         self.timerThread = QtCore.QThread(self)
         self.recTimeTimer = QtCore.QTimer()
@@ -110,6 +112,8 @@ class EtMINFLUXController(QtCore.QObject):
         self.resetRunParams()
         # initiate other parameters and flags used during experiments
         self.initiateFlagsParams()
+        # initiate plotting parameters
+        self.initiatePlottingParams()
 
     def initiateFlagsParams(self):
         # initiate flags and params
@@ -143,10 +147,19 @@ class EtMINFLUXController(QtCore.QObject):
         #self.__set_MFXROI_button_pos = [652,65]
         #self.__set_repeat_meas_button_pos = [407,65]
         # lab default
-        self.__set_MFXROI_button_pos = [1712,72]
+        self.__set_MFXROI_button_pos = [1672,72]
         self._widget.setMFXROICalibrationButtonText(self.__set_MFXROI_button_pos)
-        self.__set_repeat_meas_button_pos = [1479,72]
+        self.__set_repeat_meas_button_pos = [1436,72]
         self._widget.setRepeatMeasCalibrationButtonText(self.__set_repeat_meas_button_pos)
+
+    def initiatePlottingParams(self):
+        #self.__colors = deque(['g','r','b','y','m'])
+        self.__colors = deque(['g','g','g','g','g'])
+    
+    def popColor(self):
+        col = self.__colors.popleft()
+        self.__colors.append(col)
+        return col
 
     def getTimings(self):
         self.__sleepTime = float(self._widget.time_sleep_edit.text())
@@ -267,6 +280,8 @@ class EtMINFLUXController(QtCore.QObject):
         idx = self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)
         self.setDetLogLine(f"mfx_end_{idx}", None)
         print([self.__run_all_aoi, self.__aoi_coords_deque, self.__followingROIMode])
+        if self.__plotROI:
+            self.deleteROIGUI(idx=0)  # delete top ROI from list
         if (not self.__run_all_aoi or not self.__aoi_coords_deque) and (not self.__followingROIMode):
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.endExperiment()
@@ -277,7 +292,12 @@ class EtMINFLUXController(QtCore.QObject):
             self.newROIMFX(self.__aoi_coords_deque.popleft(), roi_idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
         elif self.__followingROIMode:
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
+            self.endFollowingROIStep()
             self.continueFastModality()
+
+    def deleteROIGUI(self, idx):
+        self._widget.coordListWidget.deleteCoord(idx)
+        self._widget.analysisHelpWidget.removeROI(idx)
 
     def setDetLogLine(self, key, val, *args):
         if val is None:
@@ -285,7 +305,22 @@ class EtMINFLUXController(QtCore.QObject):
         if args:
             self.__detLog[f"{key}{args[0]}"] = val
         else:
+            key = self.getUniqueKey(key)
             self.__detLog[key] = val
+
+    def getUniqueKey(self, key):
+        # TODO: make this unique key generation better, not just adding a number to the end. Exchange the number that is there instead, but then I need to know how many digits the number has.
+        if key not in self.__detLog:
+            return key
+        else:
+            new_key_idx = 1
+            new_key = key+str(new_key_idx)
+            if new_key not in self.__detLog:
+                return new_key
+            while new_key in self.__detLog:
+                new_key_idx += 1
+                new_key = new_key+str(new_key_idx)
+            return new_key
 
     def endExperiment(self):
         """ Save all etMINFLUX scan metadata/log file and data. """
@@ -304,6 +339,11 @@ class EtMINFLUXController(QtCore.QObject):
         if self.__autoSaveMeas:
             # save all MINFLUX data (including multiple ROI, if so)
             self.saveMINFLUXdata(path_prefix=filename_prefix)
+
+    def endFollowingROIStep(self):
+        filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
+        # save confocal data leading up to event image
+        self.saveValidationImages(prev=True, prev_ana=False, path_prefix=filename_prefix)
 
     def getTransformName(self):
         """ Get the name of the pipeline currently used. """
@@ -467,7 +507,10 @@ class EtMINFLUXController(QtCore.QObject):
             # if recording mode is following ROI and we are currently following a ROI
             if self.__followingROIModeContinue:
                 # if we are redetecting the ROI
-                if self.__followingROIRedetect:
+                if not self.__followingROIMode:
+                    # if following ROI mode check box has been unchecked - end experiment
+                    self.endFollowingROIExperiment()
+                elif self.__followingROIRedetect:
                     coords_detected, roi_sizes = self.runPipeline()
                     coords_scan, roi_size = self.postPipelineFollowingROI(coords_detected, roi_sizes)
                     if len(coords_scan)>0:
@@ -529,11 +572,12 @@ class EtMINFLUXController(QtCore.QObject):
         # if we have some detected or randomized coords
         if coords_detected.size != 0:
             # plot detected coords in help widget
-            self.__analysisHelper.plotScatter(coords_detected, color='g')
-            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            colors = [self.popColor() for _ in range(len(coords_detected))]
+            self.__analysisHelper.plotScatter(coords_detected, colors=colors)
+            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, colors=colors, presetROISize=self.__presetROISize)
             if self.__presetROISize:
                 roi_sizes = self.getPresetRoiSize(len(coords_detected))
-            self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
+            self._widget.coordListWidget.addCoords(coords_detected, roi_sizes, colors)
 
     def postPipelineValidate(self, coords_detected, roi_sizes):
         """ Called if in validation mode, and initiates validation run or takes care of validation run when finishing. """
@@ -554,8 +598,9 @@ class EtMINFLUXController(QtCore.QObject):
         # initiate validation
         elif coords_detected.size != 0:
             # if some events where detected and not validating plot detected coords in help widget
-            self.__analysisHelper.plotScatter(coords_detected, color='g')
-            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
+            colors = [self.popColor() for _ in range(len(coords_detected))]
+            self.__analysisHelper.plotScatter(coords_detected, colors=colors)
+            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, colors=colors, presetROISize=self.__presetROISize)
             if self.__presetROISize:
                 roi_sizes = self.getPresetRoiSize(len(coords_detected))
             self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
@@ -615,7 +660,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def postPipelineFollowingROI(self, coords_detected, roi_sizes):
         """ Called if in experiment mode and following ROI mode and following ROI redetection mode, and returns MINFLUX scan coordinates according to GUI settings. """
-        thresh_dist = 10
+        self.getRedetectDistThreshold()
         # if we have any newly detected coordinates
         if coords_detected.size != 0:
             min_dist = 1e10
@@ -627,13 +672,15 @@ class EtMINFLUXController(QtCore.QObject):
                     min_dist = dist
                     min_idx = idx
             # if the nearest new coordinate is below threshold, consider that our coordinate that has moved
-            if min_dist < thresh_dist:
+            if min_dist < self.__follow_roi_redetectdist_threshold:
                 if np.size(coords_detected) > 2:
                     coords_scan = coords_detected[min_idx,:]
                 else:
                     coords_scan = coords_detected[min_idx]
                 if not self.__presetROISize:
                     roi_size = roi_sizes[min_idx]
+                else:
+                    roi_size = None
             # else do not consider that we have a valid coordinate
             else:
                 coords_detected = np.array([])
@@ -696,27 +743,33 @@ class EtMINFLUXController(QtCore.QObject):
         """ End experiment after a recalculated following ROI was not detected. """
         # TODO: check that this is the correct order and enough things to end the experiment properly
         self.pauseFastModality()
-        self.endExperiment()
+        #self.endExperiment()
         self.__followingROIModeContinue = False
         self.continueFastModality()
-        # TODO: Might need to add a way to end following ROI properly also if it goes on forever, is clicking the stop button really enough to make it save all data and so?
 
     def helpImageGeneration(self, coords_detected, roi_sizes):
         """ Called after starting MINFLUX acquisition, if some additional info regarding detected coordinates should be viewed/saved. """
-        print(1)
+        time.sleep(self.__sleepTime)
         self.setEventsImage(coords_detected)
-        print(2)
         if self.__plotROI:
-            print(3)
             # set analysis image in help widget and plot detected coords in help widget
+            colors = [self.popColor() for _ in range(len(coords_detected))]
             self.setAnalysisHelpImg(self.img)
-            self.__analysisHelper.plotScatter(coords_detected, color='g')
-            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, color='g', presetROISize=self.__presetROISize)
-            print(4)
+            self.__analysisHelper.plotScatter(coords_detected, colors=colors)
+            self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, colors=colors, presetROISize=self.__presetROISize)
             if self.__presetROISize:
                 roi_sizes = self.getPresetRoiSize(len(coords_detected))
-            self._widget.coordListWidget.addCoords(coords_detected, roi_sizes)
-            print(5)
+            self._widget.coordListWidget.addCoords(coords_detected, roi_sizes, colors)
+
+    def deleteROI(self):
+        roi_idx = self._widget.coordListWidget.list.currentRow()
+        self._widget.coordListWidget.list.takeItem(roi_idx)
+        del self.__aoi_coords_deque[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
+        try:
+            del self.__aoi_sizes_deque[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
+        except:
+            print('roi sizes empty - preset size')
+        self._widget.analysisHelpWidget.removeROI(roi_idx)
 
     def setEventsImage(self, coords):
         """ Create an image with pixel-marked events in the imspector measurement. """
@@ -830,6 +883,9 @@ class EtMINFLUXController(QtCore.QObject):
 
     def getConfocalInterval(self):
         self.__follow_roi_confocal_interval = int(self._widget.follow_roi_interval_edit.text())
+
+    def getRedetectDistThreshold(self):
+        self.__follow_roi_redetectdist_threshold = int(self._widget.follow_roi_redetectthresh_edit.text())
 
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
@@ -948,6 +1004,7 @@ class EtMINFLUXController(QtCore.QObject):
     def _saveImage(self, img, path_prefix, path_suffix):
         fileName = path_prefix + '_' + path_suffix + '.tif'
         filePath = os.path.join(_dataDir, fileName)
+        print(np.shape(img))
         tiff.imwrite(filePath, img)
 
     def pauseFastModality(self):
@@ -1023,10 +1080,10 @@ class AnalysisImgHelper():
         max_val = float(self._widget.levelMaxEdit.text())
         self._widget.img.setLevels([min_val, max_val])
 
-    def plotScatter(self, coords, color):
-        self._widget.scatterPlot.setData(x=[coord[0] for coord in coords], y=[coord[1] for coord in coords], pen=pg.mkPen(None), brush=color, symbol='x', size=8)
+    def plotScatter(self, coords, colors):
+        self._widget.scatterPlot.setData(x=[coord[0] for coord in coords], y=[coord[1] for coord in coords], pen=pg.mkPen(None), brush=colors, symbol='x', size=8)
 
-    def plotRoiRectangles(self, coords, roi_sizes, color, presetROISize):
+    def plotRoiRectangles(self, coords, roi_sizes, colors, presetROISize):
         # remove previously drawn ROIs
         self._widget.removeROIs()
         # create rectangle items for each ROI
@@ -1034,7 +1091,8 @@ class AnalysisImgHelper():
             µm_px_size = self.etMINFLUXController.getTransformCoeffs()[4]/self.etMINFLUXController.getTransformCoeffs()[3]   # µm to pixels
             roi_size_fix = [float(self.etMINFLUXController._widget.size_x_edit.text())*µm_px_size, float(self.etMINFLUXController._widget.size_y_edit.text())*µm_px_size]
             roi_sizes = [roi_size_fix for _ in coords]
-        for coord, roi_size in zip(coords, roi_sizes):
+        for idx, [coord, roi_size] in enumerate(zip(coords, roi_sizes)):
+            color = colors[idx]
             roi_temp = pg.PlotCurveItem(x=[coord[0]-roi_size[0]/2,coord[0]+roi_size[0]/2,coord[0]+int(roi_size[0]/2),coord[0]-int(roi_size[0]/2),coord[0]-int(roi_size[0]/2)], y=[coord[1]-roi_size[1]/2,coord[1]-roi_size[1]/2,coord[1]+roi_size[1]/2,coord[1]+roi_size[1]/2,coord[1]-roi_size[1]/2], pen=pg.mkPen(color, width=2))
             self._widget.rois_draw.append(roi_temp)
         # draw ROIs
