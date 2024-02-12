@@ -90,6 +90,7 @@ class EtMINFLUXController(QtCore.QObject):
 
         self._widget.coordListWidget.delROIButton.clicked.connect(self.deleteROI)
         self._widget.followROIModeCheck.clicked.connect(self.toggleFollowingROI)
+        self._widget.triggerAllROIsCheck.clicked.connect(self.toggleTriggerAllROIs)
 
         # create timer for fixed recording time syncing
         self.timerThread = QtCore.QThread(self)
@@ -109,6 +110,8 @@ class EtMINFLUXController(QtCore.QObject):
         self.initiateFlagsParams()
         # initiate plotting parameters
         self.initiatePlottingParams()
+        # get timings from GUI
+        self.getTimings()
 
     def initiateFlagsParams(self):
         # initiate flags and params
@@ -142,9 +145,9 @@ class EtMINFLUXController(QtCore.QObject):
         #self.__set_MFXROI_button_pos = [652,65]
         #self.__set_repeat_meas_button_pos = [407,65]
         # lab default
-        self.__set_MFXROI_button_pos = [1672,72]
+        self.__set_MFXROI_button_pos = [1539,72]
         self._widget.setMFXROICalibrationButtonText(self.__set_MFXROI_button_pos)
-        self.__set_repeat_meas_button_pos = [1436,72]
+        self.__set_repeat_meas_button_pos = [1304,72]
         self._widget.setRepeatMeasCalibrationButtonText(self.__set_repeat_meas_button_pos)
 
     def initiatePlottingParams(self):
@@ -283,7 +286,8 @@ class EtMINFLUXController(QtCore.QObject):
         self.setDetLogLine(f"mfx_end_{idx}", None)
         if self.__plotROI:
             self.deleteROIGUI(idx=0)  # delete top ROI from list
-        if (not self.__run_all_aoi or not self.__aoi_coords_deque) and (not self.__followingROI):
+        if (not self.__run_all_aoi or not self.__aoi_coords_deque) and (not self.__followingROI):# THIS ROW IS WRONG SOMEHOW, FIX
+            #if (self.__run_all_aoi and not self.__aoi_coords_deque) and (not self.__followingROI):
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.endExperiment()
             self.continueFastModality()
@@ -795,6 +799,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def helpImageGeneration(self, coords_detected, roi_sizes):
         """ Called after starting MINFLUX acquisition, if some additional info regarding detected coordinates should be viewed/saved. """
+        ### TODO: THE ROI RECTANGLES AND SCATTER DOES NOT WORK FOR FOLLOWING ROI MODE - FIX IT!
         time.sleep(self.__sleepTime)
         self.setEventsImage(coords_detected)
         if self.__plotROI:
