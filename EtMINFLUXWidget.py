@@ -48,7 +48,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.recordBinaryMaskButton = QtWidgets.QPushButton('Record binary mask')
         self.saveCurrentMeasButton = QtWidgets.QPushButton('Save curr. meas.')
         # creat button for unlocking any softlock happening
-        self.setBusyFalseButton = QtWidgets.QPushButton('Unlock softlock')
+        self.softResetButton = QtWidgets.QPushButton('Soft reset')
         # create check box for endless running mode
         self.endlessScanCheck = QtWidgets.QCheckBox('Endless')
         # create check box for scan all detected ROIs
@@ -70,6 +70,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.autoSaveCheck.setChecked(True)
         # create check box for plotting ROI even in experiment mode
         self.plotROICheck = QtWidgets.QCheckBox('Plot ROI (experiment mode)')
+        # create check box for confocal monitoring pausing between frames
+        self.confocalFramePauseCheck = QtWidgets.QCheckBox('Confocal frame pause (s)')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
         self.bin_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -77,6 +79,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.bin_smooth_label = QtWidgets.QLabel('Bin. smooth (px)')
         self.bin_smooth_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_smooth_edit = QtWidgets.QLineEdit(str(2))
+        self.bin_neg_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
+        self.bin_neg_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.bin_neg_thresh_edit = QtWidgets.QLineEdit(str(10))
+        self.bin_neg_smooth_label = QtWidgets.QLabel('Bin. smooth (px)')
+        self.bin_neg_smooth_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.bin_neg_smooth_edit = QtWidgets.QLineEdit(str(2))
         # create editable field for number of initial frames without analysis
         self.init_frames_label = QtWidgets.QLabel('Initial frames')
         self.init_frames_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -111,13 +119,16 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.lines_analysis_label = QtWidgets.QLabel('Analysis period (lines)')
         self.lines_analysis_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.lines_analysis_edit = QtWidgets.QLineEdit(str(100))
+        self.conf_frame_pause_edit = QtWidgets.QLineEdit(str(10))
+        self.conf_frame_pause_edit.setReadOnly(True)  # make it non-editable currently
+        self.conf_frame_pause_edit.setStyleSheet("color: gray;")
         # time sleeps and drag durations
         self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
         self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.time_sleep_edit = QtWidgets.QLineEdit(str(0.3))
         self.time_sleep_roiswitch_label = QtWidgets.QLabel('Time sleeps - ROI switch (s)')
         self.time_sleep_roiswitch_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(2))
+        self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(1))
         self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
         self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
@@ -135,32 +146,35 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.saving_title = QtWidgets.QLabel('Saving')
         self.saving_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.saving_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
-        self.follow_ROI_mode_title = QtWidgets.QLabel('ROI following mode')
-        self.follow_ROI_mode_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-        self.follow_ROI_mode_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
-        self.gui_calibration_title = QtWidgets.QLabel('GUI calibration')
-        self.gui_calibration_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-        self.gui_calibration_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.binary_title = QtWidgets.QLabel('Binary mask')
+        self.binary_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.binary_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.binary_neg_title = QtWidgets.QLabel('Binary negative mask')
+        self.binary_neg_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.binary_neg_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.minflux_title = QtWidgets.QLabel('MINFLUX imaging parameters')
         self.minflux_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.minflux_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.pipeline_title = QtWidgets.QLabel('Analysis pipeline')
         self.pipeline_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.pipeline_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
-        self.analysis_control_title = QtWidgets.QLabel('Analysis control')
-        self.analysis_control_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-        self.analysis_control_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
-        self.binary_title = QtWidgets.QLabel('Binary mask')
-        self.binary_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-        self.binary_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.transform_title = QtWidgets.QLabel('Coordinate transform')
         self.transform_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.transform_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.follow_ROI_mode_title = QtWidgets.QLabel('ROI following mode')
+        self.follow_ROI_mode_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.follow_ROI_mode_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.gui_calibration_title = QtWidgets.QLabel('GUI calibration')
+        self.gui_calibration_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.gui_calibration_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.analysis_control_title = QtWidgets.QLabel('Analysis control')
+        self.analysis_control_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.analysis_control_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
 
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
-        self.analysisHelpWidget = AnalysisWidget(*args, **kwargs)
+        self.analysisHelpWidget = AnalysisWidget()#*args, **kwargs)
         # help widget for showing coords list
         self.coordListWidget = CoordListWidget(*args, **kwargs)
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
@@ -175,7 +189,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.endlessScanCheck, currentRow, 1)
         self.grid.addWidget(self.experimentModesPar_label, currentRow, 2)
         self.grid.addWidget(self.experimentModesPar, currentRow, 3)
-        self.grid.addWidget(self.setBusyFalseButton, currentRow, 4)
+        self.grid.addWidget(self.softResetButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.pipeline_title, currentRow, 0, 1, 2)
         self.grid.addWidget(self.transform_title, currentRow, 2, 1, 3)
@@ -243,20 +257,35 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.drag_dur_label, currentRow, 2)
         self.grid.addWidget(self.drag_dur_edit, currentRow, 3)
         currentRow += 1
-        self.grid.addWidget(self.saving_title, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
+        self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
         self.grid.addWidget(self.follow_ROI_mode_title, currentRow, 2, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 0)
-        self.grid.addWidget(self.autoSaveCheck, currentRow, 1)
+        self.grid.addWidget(self.saving_title, currentRow, 0, 1, 2)
         self.grid.addWidget(self.roiFollowingModesPar_label, currentRow, 2)
         self.grid.addWidget(self.roiFollowingModesPar, currentRow, 3)
         self.grid.addWidget(self.followROIModeCheck, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 0)
+        self.grid.addWidget(self.autoSaveCheck, currentRow, 1)
         self.grid.addWidget(self.follow_roi_interval_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_interval_edit, currentRow, 3)
         currentRow += 1
         self.grid.addWidget(self.follow_roi_redetectthresh_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_redetectthresh_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.binary_neg_title, currentRow, 2, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_neg_smooth_label, currentRow, 2)
+        self.grid.addWidget(self.bin_neg_smooth_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_neg_thresh_label, currentRow, 2)
+        self.grid.addWidget(self.bin_neg_thresh_edit, currentRow, 3)
+
+    def resetHelpWidget(self):
+        self.analysisHelpWidget = AnalysisWidget()
+        self.coordListWidget = CoordListWidget()
+        self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
