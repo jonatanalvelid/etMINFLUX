@@ -98,7 +98,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.size_y_edit = QtWidgets.QLineEdit(str(2))
         self.mfx_rectime_label = QtWidgets.QLabel('MFX ROI rec time (s)')
         self.mfx_rectime_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.mfx_rectime_edit = QtWidgets.QLineEdit(str(2))
+        self.mfx_rectime_edit = QtWidgets.QLineEdit(str(60))
         self.mfx_exc_laser_label = QtWidgets.QLabel('MFX exc laser')
         self.mfx_exc_laser_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.mfx_exc_laser = list()

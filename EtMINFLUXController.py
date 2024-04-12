@@ -301,8 +301,14 @@ class EtMINFLUXController(QtCore.QObject):
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
-        idx = self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)
-        self.setDetLogLine(f"mfx_end_{idx}", None)
+        if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
+            self.setDetLogLine(f"mfx_end-id{self.__roiFollowMultipleCurrIdx}-cycle{self.__roiFollowCurrCycle}", None)    
+        elif self.__followingROI:
+            self.setDetLogLine(f"mfx_end-cycle{self.__roiFollowCurrCycle}", None)               
+        elif self.__run_all_aoi:
+            self.setDetLogLine(f"mfx_end-id{self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)}", None)
+        else:
+            self.setDetLogLine("mfx_end", None)
         if self.__plotROI:
             self.deleteROIGUI(idx=0)  # delete top ROI from list
         if (not self.__run_all_aoi or not self.__aoi_coords_deque) and (not self.__followingROI):# THIS ROW IS WRONG SOMEHOW, FIX
@@ -311,11 +317,11 @@ class EtMINFLUXController(QtCore.QObject):
             self.endExperiment()
             self.continueFastModality()
             self.__fast_frame = 0
-        elif self.__followingROIMode and self.__followingROIMode == ROIFollowMode.Multiple:
+        elif self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.__roiFollowMultipleCurrIdx += 1
             if self.__roiFollowMultipleCurrIdx == len(self.__aoi_coords_deque):
-                self.__roiFollowMultipleCurrCycle += 1
+                self.__roiFollowCurrCycle += 1
                 self.__roiFollowMultipleCurrIdx = 0
                 self.endFollowingROIStep()
                 self.continueFastModality()
@@ -323,12 +329,13 @@ class EtMINFLUXController(QtCore.QObject):
             coords = self.__aoi_coords_deque.popleft()
             self.__aoi_coords_deque.append(coords)
             self.newROIMFX(coords, roi_idx=self.__roiFollowMultipleCurrIdx)
+        elif self.__followingROI:
+            time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
+            self.__roiFollowCurrCycle += 1
+            self.endFollowingROIStep()
         elif self.__run_all_aoi:
             time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.newROIMFX(self.__aoi_coords_deque.popleft(), roi_idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
-        elif self.__followingROI:
-            time.sleep(self.__sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
-            self.endFollowingROIStep()
             self.continueFastModality()
 
     def deleteROIGUI(self, idx):
@@ -346,6 +353,9 @@ class EtMINFLUXController(QtCore.QObject):
 
     def getUniqueKey(self, key):
         # TODO: make this unique key generation better, not just adding a number to the end. Exchange the number that is there instead, but then I need to know how many digits the number has.
+        return self.getUniqueKeyLegacy(key)
+
+    def getUniqueKeyLegacy(self, key):
         if key not in self.__detLog:
             return key
         else:
@@ -362,6 +372,10 @@ class EtMINFLUXController(QtCore.QObject):
         """ Save all etMINFLUX scan metadata/log file and data. """
         self.setDetLogLine("pipeline", self.getPipelineName())
         self.logPipelineParamVals()
+        # log recording mode and rec time, if exisiting
+        if self.__presetRecTime:
+            self.setDetLogLine("MFXRecTime", self.__rec_time_scan)
+        #TODO Add log recording mode, if following ROI. Tricky, as it False:s the followingROI parameter before entering here (when unclicking box to stop it). Create another parameter when falsing it if actively scanning? Or is unclicking box not a good way to stop it?
         # save log file with temporal info of trigger event
         filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
         name = os.path.join(_logsDir, filename_prefix) + '_log'
@@ -522,7 +536,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__aoi_coords_deque = deque(maxlen=0)
         self.__aoi_sizes_deque = deque(maxlen=0)
         self.__roiFollowMultipleCurrIdx = 0
-        self.__roiFollowMultipleCurrCycle = 0
+        self.__roiFollowCurrCycle = 0
         self.__followingROIContinue = False
         self.resetTimerThreads()
 
@@ -574,7 +588,7 @@ class EtMINFLUXController(QtCore.QObject):
                     coords_detected, roi_sizes = self.runPipeline()
                     coords_scan, roi_size = self.postPipelineFollowingROISingleRedetect(coords_detected, roi_sizes)
                     if len(coords_scan)>0:
-                        self.acquireMINFLUXFull(coords_scan, roi_size, logging=False)
+                        self.acquireMINFLUXFull(coords_scan, roi_size)
                     else:
                         # end experiment, as we no longer have anything to follow, and we cannot suddenly "find it back" again in the next image
                         self.endFollowingROIExperiment()
@@ -728,15 +742,33 @@ class EtMINFLUXController(QtCore.QObject):
                     roi_size = self.__aoi_sizes_deque.popleft()
                 else:
                     roi_size = None
-                self._widget.initiateButton.setText('Next ROI')
-            else:
+                self._widget.initiateButton.setText('Next ROI')  
+            elif self.__followingROI and self.__followingROIMode == ROIFollowMode.SingleRedetect and self.__exinfo is not None:
                 # take random detected coords (and roi_size if applicable) as event (idx = 0 if we want brightest)
-                idx = 0  # default value, if we do not have more
+                idx = self.__exinfo
                 if np.size(coords_detected) > 2:
-                    idx = np.random.randint(len(coords_detected))
                     coords_scan = coords_detected[idx,:]
                 else:
                     coords_scan = coords_detected[0]
+                if not self.__presetROISize:
+                    roi_size = roi_sizes[idx]
+                else:
+                    roi_size = None                
+            else:
+                # take random detected coords (and roi_size if applicable) as event (idx = 0 if we want brightest)
+                idx = 0  # default value, if we do not have more
+                random_coord = False  # Set to False if you want top coord candidate, True if you want random coord
+                if random_coord == True:
+                    if np.size(coords_detected) > 2:
+                        idx = np.random.randint(len(coords_detected))
+                        coords_scan = coords_detected[idx,:]
+                    else:
+                        coords_scan = coords_detected[0]
+                elif random_coord == False:
+                    if np.size(coords_detected) > 2:
+                        coords_scan = coords_detected[idx,:]
+                    else:
+                        coords_scan = coords_detected[0]
                 if not self.__presetROISize:
                     roi_size = roi_sizes[idx]
                 else:
@@ -793,8 +825,8 @@ class EtMINFLUXController(QtCore.QObject):
 
     def acquireMINFLUXFull(self, coords_scan, roi_size, logging=True):
         """ Full MINFLUX acquisition function. """
-        if logging:
-            self.setDetLogLine("prepause", None)
+        #if logging:
+        #    self.setDetLogLine("prepause", None)
         # pause fast imaging
         self.pauseFastModality()
         if logging:
@@ -823,10 +855,13 @@ class EtMINFLUXController(QtCore.QObject):
             # log detected and scanning center coordinate, with different keys if running all ROIs or only one
             if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
                 self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__roiFollowMultipleCurrIdx)
-                self.setDetLogLine(f"mfx_initiate_{self.__roiFollowMultipleCurrIdx}-{self.__roiFollowMultipleCurrCycle}", None)                
+                self.setDetLogLine(f"mfx_initiate-id{self.__roiFollowMultipleCurrIdx}-cycle{self.__roiFollowCurrCycle}", None)
+            elif self.__followingROI:
+                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
+                self.setDetLogLine(f"mfx_initiate-cycle{self.__roiFollowCurrCycle}", None)
             elif self.__run_all_aoi:
                 self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
-                self.setDetLogLine(f"mfx_initiate_{self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)}", None)
+                self.setDetLogLine(f"mfx_initiate-id{self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)}", None)
             else:
                 self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
                 self.setDetLogLine("mfx_initiate", None)
@@ -834,9 +869,8 @@ class EtMINFLUXController(QtCore.QObject):
 
     def endFollowingROIExperiment(self):
         """ End experiment after a recalculated following ROI was not detected. """
-        # TODO: check that this is the correct order and enough things to end the experiment properly
         self.pauseFastModality()
-        #self.endExperiment()
+        self.endExperiment()
         self.__followingROIContinue = False
         self.continueFastModality()
 
@@ -907,11 +941,6 @@ class EtMINFLUXController(QtCore.QObject):
             roi_size_scan = np.subtract(coord_top, coord_bot)
             roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
         time.sleep(self.__sleepTime)
-        # log detected and scanning center coordinate
-        if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
-            self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=roi_idx, cycle=self.__roiFollowMultipleCurrCycle)
-        else:
-            self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=roi_idx)
         # get preset rec time, if using that mode
         if self.__presetRecTime:
             rec_time_scan = float(self._widget.mfx_rectime_edit.text())
@@ -920,28 +949,38 @@ class EtMINFLUXController(QtCore.QObject):
             self.__rec_time_scan = None
         # initiate and run scanning with transformed center coordinate
         self.initiateMFX(position=coords_center_scan, ROI_size=roi_size_scan, ROI_size_um=roi_size_um_scan, pos_conf=coords_scan)
-        if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
-            self.setDetLogLine(f"mfx_initiate_{roi_idx}-{self.__roiFollowMultipleCurrCycle}", None) 
+        # log detected and scanning center coordinate
+        if self.__followingROI:  # and self.__followingROIMode == ROIFollowMode.Multiple:
+            self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=roi_idx, cycle=self.__roiFollowCurrCycle)
+            self.setDetLogLine(f"mfx_initiate-id{roi_idx}-cycle{self.__roiFollowCurrCycle}", None) 
         else:
-            self.setDetLogLine(f"mfx_initiate_{roi_idx}", None)
+            self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=roi_idx)
+            self.setDetLogLine(f"mfx_initiate-id{roi_idx}", None)
         self.startMFX()
 
     def logCoordinates(self, coords_scan, coords_center_scan, roi_size, idx=None, cycle=None):
         """ Log detection and scan coordinates. """
-        if cycle:
-            self.setDetLogLine(f"x_center_px_{idx}-{cycle}", coords_scan[0])
-            self.setDetLogLine(f"y_center_px_{idx}-{cycle}", coords_scan[1])
-            self.setDetLogLine(f"x_center_um_{idx}-{cycle}", coords_center_scan[0])
-            self.setDetLogLine(f"y_center_um_{idx}-{cycle}", coords_center_scan[1])
-            self.setDetLogLine(f"x_roi_size_um_{idx}-{cycle}", roi_size[0])
-            self.setDetLogLine(f"y_roi_size_um_{idx}-{cycle}", roi_size[1])
+        if cycle and idx:
+            self.setDetLogLine(f"x_center_px-id{idx}-cycle{cycle}", coords_scan[0])
+            self.setDetLogLine(f"y_center_px-id{idx}-cycle{cycle}", coords_scan[1])
+            self.setDetLogLine(f"x_center_um-id{idx}-cycle{cycle}", coords_center_scan[0])
+            self.setDetLogLine(f"y_center_um-id{idx}-cycle{cycle}", coords_center_scan[1])
+            self.setDetLogLine(f"x_roi_size_um-id{idx}-cycle{cycle}", roi_size[0])
+            self.setDetLogLine(f"y_roi_size_um-id{idx}-cycle{cycle}", roi_size[1])
+        elif cycle:
+            self.setDetLogLine(f"x_center_px-cycle{cycle}", coords_scan[0])
+            self.setDetLogLine(f"y_center_px-cycle{cycle}", coords_scan[1])
+            self.setDetLogLine(f"x_center_um-cycle{cycle}", coords_center_scan[0])
+            self.setDetLogLine(f"y_center_um-cycle{cycle}", coords_center_scan[1])
+            self.setDetLogLine(f"x_roi_size_um-cycle{cycle}", roi_size[0])
+            self.setDetLogLine(f"y_roi_size_um-cycle{cycle}", roi_size[1])
         elif idx:
-            self.setDetLogLine(f"x_center_px_{idx}", coords_scan[0])
-            self.setDetLogLine(f"y_center_px_{idx}", coords_scan[1])
-            self.setDetLogLine(f"x_center_um_{idx}", coords_center_scan[0])
-            self.setDetLogLine(f"y_center_um_{idx}", coords_center_scan[1])
-            self.setDetLogLine(f"x_roi_size_um_{idx}", roi_size[0])
-            self.setDetLogLine(f"y_roi_size_um_{idx}", roi_size[1])
+            self.setDetLogLine(f"x_center_px-id{idx}", coords_scan[0])
+            self.setDetLogLine(f"y_center_px-id{idx}", coords_scan[1])
+            self.setDetLogLine(f"x_center_um-id{idx}", coords_center_scan[0])
+            self.setDetLogLine(f"y_center_um-id{idx}", coords_center_scan[1])
+            self.setDetLogLine(f"x_roi_size_um-id{idx}", roi_size[0])
+            self.setDetLogLine(f"y_roi_size_um-id{idx}", roi_size[1])
         else:
             self.setDetLogLine("x_center_px", coords_scan[0])
             self.setDetLogLine("y_center_px", coords_scan[1])
@@ -975,8 +1014,8 @@ class EtMINFLUXController(QtCore.QObject):
             self.startRecTimer()
         else:
             self.setMFXRecTime(0)
-        if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
-            self.setMFXDataTag(pos_conf, ROI_size_um, self.__roiFollowMultipleCurrIdx, self.__roiFollowMultipleCurrCycle)
+        if self.__followingROI: # and self.__followingROIMode == ROIFollowMode.Multiple:
+            self.setMFXDataTag(pos_conf, ROI_size_um, self.__roiFollowMultipleCurrIdx, self.__roiFollowCurrCycle)
         else:
             self.setMFXDataTag(pos_conf, ROI_size_um, self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
         self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
@@ -1011,7 +1050,7 @@ class EtMINFLUXController(QtCore.QObject):
             rectime = float(self.__follow_roi_confocal_interval - self.__rec_time_deadtime * 2)
             datatag = datatag + '-RecTime['+str(rectime)+'s]'
             if cycle is not None:
-                datatag = datatag + '-Cycle['+str(self.__roiFollowMultipleCurrCycle)+']'
+                datatag = datatag + '-Cycle['+str(self.__roiFollowCurrCycle)+']'
         elif self.__presetRecTime:
             datatag = datatag + '-RecTime['+str(self.__rec_time_scan)+'s]'
         self._imspector.value_at('Minflux/tag', specpy.ValueTree.Measurement).set(datatag)
