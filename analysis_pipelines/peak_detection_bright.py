@@ -3,7 +3,7 @@ from scipy import ndimage as ndi
 from skimage import measure
 import cv2
 
-def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None,
+def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None,
                         presetROIsize=None, min_dist=30, thresh_abs=20, num_peaks=10, smoothing_radius=2, 
                         border_limit=15, init_smooth=1, roi_border=5, roi_th_factor=6):
     """

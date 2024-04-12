@@ -2,8 +2,7 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import numpy as np
-import cupy as cp
-from cupyx.scipy import ndimage as ndi
+from scipy import ndimage as ndi
 import cv2
 import trackpy as tp
 import pandas as pd
@@ -13,10 +12,10 @@ tp.quiet()
 def eucl_dist(a,b):
     return np.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2)
 
-def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None, min_dist=4, 
-                 num_peaks=100, thresh_abs_lo=500, thresh_abs_hi=8000, border_limit=10,
-                 smoothing_radius=0.7, memory_frames=5, track_search_dist=4, frames_appear=10,
-                 thresh_stayratio=0.7, thresh_intincratio=1.05, thresh_move_dist=3):
+def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None, presetROIsize=None,
+                     min_dist=4, num_peaks=100, thresh_abs_lo=500, thresh_abs_hi=8000, border_limit=10,
+                     smoothing_radius=0.7, memory_frames=5, track_search_dist=4, frames_appear=10,
+                     thresh_stayratio=0.7, thresh_intincratio=1.05, thresh_move_dist=3):
     """
     Common parameters:
     img - current image,
@@ -39,6 +38,8 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo
     thresh_intincratio - the threshold ratio of the intensity increase in the area of the peak
     thresh_move_dist - the threshold start-end distance a peak is allowed to move during frames_appear
     """
+
+    roi_sizes = False
     
     # define non-adjustable parameters
     f_multiply = 1e0
@@ -53,12 +54,9 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo
     memory_frames = int(memory_frames)
     
     if binary_mask is None:
-        binary_mask = cp.ones(cp.shape(img)).astype('uint16')
-    elif np.shape(img) != np.shape(binary_mask):
-        binary_mask = cp.ones(cp.shape(img)).astype('uint16')
-    else:
-        binary_mask = cp.array(binary_mask).astype('uint16')
-    img = cp.array(img).astype('float32')
+        binary_mask = np.ones(np.shape(img)).astype('uint16')
+    
+    # gaussian filter raw image
     img_filt = ndi.filters.gaussian_filter(img, sigma=smoothing_radius_raw)
     
     # difference of gaussians to get clear peaks separated from spread-out bkg and noise
@@ -71,7 +69,6 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo
     img_dog[img_dog > 30000] = 0
     img_dog = img_dog * f_multiply
     img_ana = img_dog * binary_mask
-    img_ana = img_dog * cp.array(binary_mask)
     img_ana = ndi.filters.gaussian_filter(img_ana, smoothing_radius)  # Gaussian filter the image, to remove noise and so on, to get a better center estimate
     img_ana[img_ana > thresh_abs_hi] = thresh_abs_hi
     
@@ -80,22 +77,22 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo
     # get filter structuring element
     footprint = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=[size,size])
     # maximum filter (dilation + equal)
-    image_max = cv2.dilate(img_ana.get(), kernel=footprint)
+    image_max = cv2.dilate(img_ana, kernel=footprint)
     #return image, image_max
-    mask = cp.equal(img_ana, cp.array(image_max))
+    mask = np.equal(img_ana, image_max)
     mask &= np.greater(img_ana, thresh_abs_lo)
     mask &= np.less(img_ana, thresh_abs_hi)
     
     # get coordinates of peaks
-    coordinates = cp.nonzero(mask)
+    coordinates = np.nonzero(mask)
     intensities = img_ana[coordinates]
     # highest peak first
-    idx_maxsort = cp.argsort(-intensities).get()
-    coordinates = tuple(arr.get() for arr in coordinates)
+    idx_maxsort = np.argsort(-intensities)
+    coordinates = tuple(arr for arr in coordinates)
     coordinates = np.transpose(coordinates)[idx_maxsort]
 
     # remove everything on the border
-    imsize = cp.shape(img)[0]
+    imsize = np.shape(img)[0]
     idxremove = []
     for idx, coordpair in enumerate(coordinates):
         if coordpair[0] < border_limit or coordpair[0] > imsize - border_limit or coordpair[1] < border_limit or coordpair[1] > imsize - border_limit:
@@ -106,24 +103,23 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo
     if len(coordinates) > num_peaks:
         coordinates = coordinates[:int(num_peaks),:]
     
-    # add to old list of coordinates
     if exinfo is None:
         exinfo = pd.DataFrame(columns=['particle','t','x','y','intensity'])
     coordinates = coordinates[coordinates[:, 0].argsort()]
-
+    
     # extract intensities summed around each coordinate
     intensities = []
     for coord in coordinates:
-        intensity = cp.sum(img[coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1,coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
+        intensity = np.sum(img[coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1,coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
         intensities.append(intensity)
-
+    
     # add to old list of coordinates
     if len(exinfo) > 0:
         timepoint = max(exinfo['t'])+1
     else:
         timepoint = 0
     if len(coordinates)>0:
-        coords_df = pd.DataFrame(np.hstack((np.array(range(len(coordinates))).reshape(-1,1),timepoint*np.ones(len(coordinates)).reshape(-1,1),coordinates,np.reshape(cp.array(intensities).get(),(-1,1)))),columns=['particle','t','x','y','intensity'])
+        coords_df = pd.DataFrame(np.hstack((np.array(range(len(coordinates))).reshape(-1,1),timepoint*np.ones(len(coordinates)).reshape(-1,1),coordinates,np.array(intensities).reshape(-1,1))),columns=['particle','t','x','y','intensity'])
         tracks_all = exinfo.append(coords_df)
     else:
         tracks_all = exinfo
@@ -159,7 +155,7 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo
                         track_self = track_self_after.tail(1)
                         prev_frames = np.array(prev_frames)
                         track_intensity_before = np.sum(np.sum(prev_frames[:, int(track_self['x'])-intensity_sum_rad:int(track_self['x'])+intensity_sum_rad+1,
-                                                                         int(track_self['y'])-intensity_sum_rad:int(track_self['y'])+intensity_sum_rad+1],
+                                                                   int(track_self['y'])-intensity_sum_rad:int(track_self['y'])+intensity_sum_rad+1],
                                                                axis=1),axis=1)/(2*intensity_sum_rad+1)**2
                         track_intensity_after = track_self_after['intensity']
                         int_before = np.mean(track_intensity_before[0:meanlen])
@@ -176,9 +172,9 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, testmode=False, exinfo
                             if d_start_end < thresh_move_dist:
                                 # if all conditions are true: potential appearence event frames_appear ago, save coord of curr position
                                 print([intincratio_before, intincratio, intincrratio_tot])
-                                coords_event = np.array([[int(track_self['y']), int(track_self['x'])]])
+                                coords_event = np.array([[int(track_self['x']), int(track_self['y'])]])
                                 break
     if testmode:
-        return coords_event, tracks_all, img_ana.get()
+        return coords_event, roi_sizes, tracks_all, img_ana
     else:
-        return coords_event, tracks_all
+        return coords_event, roi_sizes, tracks_all
