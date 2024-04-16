@@ -4,9 +4,9 @@ from skimage import measure
 import cv2
 import math
 
-def peak_detection_dim(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None, presetROIsize=None,
-                       maxfilter_kersize=5, peak_min_dist=7, thresh_abs=2, num_peaks=50, smoothing_radius=1, 
-                       border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6):
+def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None, presetROIsize=None,
+                   maxfilter_kersize=5, peak_min_dist=7, thresh_abs=2, num_peaks=50, smoothing_radius=1, 
+                   border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6):
     """
     Common parameters:
     img - current image,
@@ -79,7 +79,7 @@ def peak_detection_dim(img, prev_frames=None, binary_mask=None, testmode=False, 
             idxremove_idx = [i for i, x in enumerate(dists_rem) if x]
             for idx3 in idxremove_idx:
                 idxremove.append(idx3)
-    coordinates = np.delete(coordinates,idxremove,axis=0)   
+    coordinates = np.delete(coordinates,idxremove,axis=0)
 
     # remove everyhting down to a certain length
     if len(coordinates) > num_peaks:
@@ -88,7 +88,8 @@ def peak_detection_dim(img, prev_frames=None, binary_mask=None, testmode=False, 
     # roi size calculation
     if not presetROIsize:
         roi_sizes = []
-        cut_size = 50
+        cut_size = 2*border_limit  # needed to not fail at spots close to the border.
+        # If want to treat bigger ROIs: make a check that each img_cut coordinates do not go outside the image size
         for coords in coordinates:
             img_cut = img[coords[0]-int(cut_size/2):coords[0]+int(cut_size/2), coords[1]-int(cut_size/2):coords[1]+int(cut_size/2)]
             peak_val = img[coords[0],coords[1]]
@@ -99,15 +100,10 @@ def peak_detection_dim(img, prev_frames=None, binary_mask=None, testmode=False, 
             if len(regions) > 1:
                 for region in regions[1:]:
                     labels_mask[region.coords[:,0], region.coords[:,1]] = 0
-            roi_size = [np.max(np.where(labels_mask)[0]) - np.min(np.where(labels_mask)[0]) + roi_border, np.max(np.where(labels_mask)[1]) - np.min(np.where(labels_mask)[1]) + roi_border]
+            roi_size = [np.max(np.where(labels_mask)[1]) - np.min(np.where(labels_mask)[1]) + roi_border, np.max(np.where(labels_mask)[0]) - np.min(np.where(labels_mask)[0]) + roi_border]
             roi_sizes.append(roi_size)
 
     coordinates = np.flip(coordinates, axis=1)  # seems to be needed in this pipeline
-    
-    # invert order to get dimmest detected spots first
-    coordinates = np.flip(coordinates,axis=0)
-    if not presetROIsize:
-        roi_sizes = np.flip(roi_sizes,axis=0)
 
     if testmode:
         return coordinates, roi_sizes, exinfo, img_ana

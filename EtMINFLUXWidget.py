@@ -46,6 +46,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # create buttons for calibrating coordinate transform, recording binary mask, save current measurement
         self.coordTransfCalibButton = QtWidgets.QPushButton('Transform calibration')
         self.recordBinaryMaskButton = QtWidgets.QPushButton('Record binary mask')
+        self.resetBinaryMaskButton = QtWidgets.QPushButton('Reset binary mask')
         self.saveCurrentMeasButton = QtWidgets.QPushButton('Save curr. meas.')
         # creat button for unlocking any softlock happening
         self.softResetButton = QtWidgets.QPushButton('Soft reset')
@@ -208,6 +209,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.bin_thresh_label, currentRow, 2)
         self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
+        self.grid.addWidget(self.removeBinaryMaskButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.minflux_title, currentRow, 2, 1, 3)
         currentRow += 1

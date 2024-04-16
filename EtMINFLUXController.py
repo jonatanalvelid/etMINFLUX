@@ -79,6 +79,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.initiateButton.clicked.connect(self.initiate)
         self._widget.loadPipelineButton.clicked.connect(self.loadPipeline)
         self._widget.recordBinaryMaskButton.clicked.connect(self.initiateBinaryMask)
+        self._widget.resetBinaryMaskButton.clicked.connect(self.resetBinaryMask)
         self._widget.softResetButton.clicked.connect(self.softReset)
         self._widget.setMFXROICalibrationButton.clicked.connect(self.setMFXROIButtonPosButtonCall)
         self._widget.setRepeatMeasCalibrationButton.clicked.connect(self.setRepeatMeasButtonPosButtonCall)
@@ -302,13 +303,17 @@ class EtMINFLUXController(QtCore.QObject):
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
         if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
-            self.setDetLogLine(f"mfx_end-id{self.__roiFollowMultipleCurrIdx}-cycle{self.__roiFollowCurrCycle}", None)    
+            self.setDetLogLine(f"mfx_end-id{self.__roiFollowMultipleCurrIdx}-cycle{self.__roiFollowCurrCycle}", None)
+            self.setDetLogLine("recording_mode", "roi_follow_multiple") 
         elif self.__followingROI:
-            self.setDetLogLine(f"mfx_end-cycle{self.__roiFollowCurrCycle}", None)               
+            self.setDetLogLine(f"mfx_end-cycle{self.__roiFollowCurrCycle}", None) 
+            self.setDetLogLine("recording_mode", "roi_follow_single")               
         elif self.__run_all_aoi:
             self.setDetLogLine(f"mfx_end-id{self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)}", None)
+            self.setDetLogLine("recording_mode", "all_roi") 
         else:
             self.setDetLogLine("mfx_end", None)
+            self.setDetLogLine("recording_mode", "single_roi") 
         if self.__plotROI:
             self.deleteROIGUI(idx=0)  # delete top ROI from list
         if (not self.__run_all_aoi or not self.__aoi_coords_deque) and (not self.__followingROI):# THIS ROW IS WRONG SOMEHOW, FIX
@@ -456,6 +461,11 @@ class EtMINFLUXController(QtCore.QObject):
         self._imspector.connect_end(self.imspectorLineEventBinaryMask, 1)
         self.startConfocalScanning()
         self._widget.recordBinaryMaskButton.setText('Recording...')
+
+    def resetBinaryMask(self):
+        """ Reset binary mask, back to None. """
+        self.__binary_stack = []
+        self.__binary_mask = None  # None to consider the whole image
 
     def imspectorLineEventBinaryMask(self):
         self.__confocalLineCurr += 1
@@ -692,8 +702,8 @@ class EtMINFLUXController(QtCore.QObject):
             else:
                 coords_scan = coords_detected[0]
             # log detected center coordinate
-            self.setDetLogLine("fastscan_x_center", coords_scan[0])
-            self.setDetLogLine("fastscan_y_center", coords_scan[1])
+            self.setDetLogLine("conf_x_center", coords_scan[0])
+            self.setDetLogLine("conf_y_center", coords_scan[1])
             # flag for start of validation
             self.__validating = True
             self.__post_event_frames = 0
@@ -744,14 +754,17 @@ class EtMINFLUXController(QtCore.QObject):
                     roi_size = None
                 self._widget.initiateButton.setText('Next ROI')  
             elif self.__followingROI and self.__followingROIMode == ROIFollowMode.SingleRedetect and self.__exinfo is not None:
-                # take random detected coords (and roi_size if applicable) as event (idx = 0 if we want brightest)
+                # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = self.__exinfo
-                if np.size(coords_detected) > 2:
+                if np.size(coords_detected) > np.max([2,idx]):
                     coords_scan = coords_detected[idx,:]
                 else:
                     coords_scan = coords_detected[0]
                 if not self.__presetROISize:
-                    roi_size = roi_sizes[idx]
+                    if np.size(coords_detected) > np.max([2,idx]):
+                        roi_size = roi_sizes[idx]
+                    else:
+                        roi_size = roi_sizes[0]
                 else:
                     roi_size = None                
             else:

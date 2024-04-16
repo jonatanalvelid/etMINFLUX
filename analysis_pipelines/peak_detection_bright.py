@@ -2,10 +2,11 @@ import numpy as np
 from scipy import ndimage as ndi
 from skimage import measure
 import cv2
+import math
 
-def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None,
-                        presetROIsize=None, min_dist=30, thresh_abs=20, num_peaks=10, smoothing_radius=2, 
-                        border_limit=15, init_smooth=1, roi_border=5, roi_th_factor=6):
+def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None, presetROIsize=None,
+                          maxfilter_kersize=5, peak_min_dist=7, thresh_abs=2, num_peaks=50, smoothing_radius=1, 
+                          border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6):
     """
     Common parameters:
     img - current image,
@@ -15,7 +16,8 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=Fals
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
 
     Pipeline specific parameters:
-    min_dist - minimum distance in pixels between two peaks
+    maxfilter_kersize - size of kernel for maximum filtering
+    peak_min_dist - minimum distance in pixels between two peaks
     thresh_abs - low intensity threshold in img_ana of the peaks to consider
     num_peaks - number of peaks to track
     smoothing_radius - diameter of Gaussian smoothing of img_ana, in pixels
@@ -41,7 +43,7 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=Fals
     img_ana = img * np.array(binary_mask)
 
     # Peak_local_max as a combo of opencv and numpy
-    size = int(2 * min_dist + 1)
+    size = int(2 * maxfilter_kersize + 1)
     img_ana = np.clip(img_ana, a_min=0, a_max=None)
     img_ana = img_ana.astype('float32')
     # get filter structuring element
@@ -66,6 +68,18 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=Fals
         if coordpair[0] < border_limit or coordpair[0] > imsize - border_limit or coordpair[1] < border_limit or coordpair[1] > imsize - border_limit:
             idxremove.append(idx)
     coordinates = np.delete(coordinates,idxremove,axis=0)
+
+    # remove peaks too close to each other
+    idxremove = []
+    for idx1, coordpair in enumerate(coordinates):
+        dists = [math.dist(coordpair, coordpair2) for idx2, coordpair2 in enumerate(coordinates) if idx2 != idx1]
+        dists_rem = np.array(dists) < peak_min_dist
+        if any(dists_rem):
+            idxremove.append(idx1)
+            idxremove_idx = [i for i, x in enumerate(dists_rem) if x]
+            for idx3 in idxremove_idx:
+                idxremove.append(idx3)
+    coordinates = np.delete(coordinates,idxremove,axis=0)   
 
     # remove everyhting down to a certain length
     if len(coordinates) > num_peaks:
