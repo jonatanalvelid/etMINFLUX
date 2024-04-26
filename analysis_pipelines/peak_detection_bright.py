@@ -4,7 +4,7 @@ from skimage import measure
 import cv2
 import math
 
-def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None, presetROIsize=None,
+def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                           maxfilter_kersize=5, peak_min_dist=7, thresh_abs=2, num_peaks=50, smoothing_radius=1, 
                           border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6):
     """
@@ -102,7 +102,4 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, testmode=Fals
             roi_size = [np.max(np.where(labels_mask)[0]) - np.min(np.where(labels_mask)[0]) + roi_border, np.max(np.where(labels_mask)[1]) - np.min(np.where(labels_mask)[1]) + roi_border]
             roi_sizes.append(roi_size)
 
-    if testmode:
-        return coordinates, roi_sizes, exinfo, img_ana
-    else:
-        return coordinates, roi_sizes, exinfo
+    return coordinates, roi_sizes, exinfo, img_ana

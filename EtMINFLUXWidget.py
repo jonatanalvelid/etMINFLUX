@@ -2,6 +2,10 @@ import os
 
 import pyqtgraph as pg
 from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtCore import QPoint
+
+from tkinter import TkVersion
+from tkinter.filedialog import askdirectory
 
 
 class EtMINFLUXWidget(QtWidgets.QWidget):
@@ -28,7 +32,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.experimentModesPar.addItems(self.experimentModes)
         self.experimentModesPar.setCurrentIndex(0)
         # generate dropdown list for ROI following modes
-        self.roiFollowingModes = ['Single','Multiple','SingleRedetect']
+        self.roiFollowingModes = ['Single','SingleRedetect','Multiple']
         self.roiFollowingModesPar = QtWidgets.QComboBox()
         self.roiFollowingModesPar_label = QtWidgets.QLabel('ROI following mode')
         self.roiFollowingModesPar_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -41,8 +45,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton = QtWidgets.QPushButton('Initiate etMINFLUX')
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = QtWidgets.QPushButton('Load pipeline')
-        self.setMFXROICalibrationButton = QtWidgets.QPushButton('Set MFX ROI calib.')
-        self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Rep. meas. calib.')
         # create buttons for calibrating coordinate transform, recording binary mask, save current measurement
         self.coordTransfCalibButton = QtWidgets.QPushButton('Transform calibration')
         self.recordBinaryMaskButton = QtWidgets.QPushButton('Record binary mask')
@@ -123,16 +125,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.conf_frame_pause_edit = QtWidgets.QLineEdit(str(10))
         self.conf_frame_pause_edit.setReadOnly(True)  # make it non-editable currently
         self.conf_frame_pause_edit.setStyleSheet("color: gray;")
-        # time sleeps and drag durations
-        self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
-        self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.time_sleep_edit = QtWidgets.QLineEdit(str(0.3))
-        self.time_sleep_roiswitch_label = QtWidgets.QLabel('Time sleeps - ROI switch (s)')
-        self.time_sleep_roiswitch_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(1))
-        self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
-        self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
         # create editable fields for ROI following mode
         self.follow_roi_interval_label = QtWidgets.QLabel('Confocal interval (s)')
         self.follow_roi_interval_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -141,9 +133,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.follow_roi_redetectthresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.follow_roi_redetectthresh_edit = QtWidgets.QLineEdit(str(20))
         # create GUI group titles
-        self.timing_title = QtWidgets.QLabel('Timing')
-        self.timing_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-        self.timing_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.saving_title = QtWidgets.QLabel('Saving')
         self.saving_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.saving_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
@@ -159,15 +148,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.pipeline_title = QtWidgets.QLabel('Analysis pipeline')
         self.pipeline_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.pipeline_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
-        self.transform_title = QtWidgets.QLabel('Coordinate transform')
+        self.transform_title = QtWidgets.QLabel('Coordinate transform and GUI calibration')
         self.transform_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.transform_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.follow_ROI_mode_title = QtWidgets.QLabel('ROI following mode')
         self.follow_ROI_mode_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.follow_ROI_mode_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
-        self.gui_calibration_title = QtWidgets.QLabel('GUI calibration')
-        self.gui_calibration_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-        self.gui_calibration_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.analysis_control_title = QtWidgets.QLabel('Analysis control')
         self.analysis_control_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.analysis_control_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
@@ -209,7 +195,15 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.bin_thresh_label, currentRow, 2)
         self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
-        self.grid.addWidget(self.removeBinaryMaskButton, currentRow, 4)
+        self.grid.addWidget(self.resetBinaryMaskButton, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.binary_neg_title, currentRow, 2, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_neg_smooth_label, currentRow, 2)
+        self.grid.addWidget(self.bin_neg_smooth_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_neg_thresh_label, currentRow, 2)
+        self.grid.addWidget(self.bin_neg_thresh_edit, currentRow, 3)
         currentRow += 1
         self.grid.addWidget(self.minflux_title, currentRow, 2, 1, 3)
         currentRow += 1
@@ -238,51 +232,38 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.mfx_rectime_edit, currentRow, 3)
         self.grid.addWidget(self.presetMfxRecTimeCheck, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.analysis_control_title, currentRow, 0, 1, 2)
-        self.grid.addWidget(self.timing_title, currentRow, 2, 1, 2)
-        self.grid.addWidget(self.gui_calibration_title, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.lines_analysis_label, currentRow, 0)
-        self.grid.addWidget(self.lines_analysis_edit, currentRow, 1)
-        self.grid.addWidget(self.time_sleep_label, currentRow, 2)
-        self.grid.addWidget(self.time_sleep_edit, currentRow, 3)
-        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.plotROICheck, currentRow, 0)
-        self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 1)
-        self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 2)
-        self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 3)
-        self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.init_frames_label, currentRow, 0)
-        self.grid.addWidget(self.init_frames_edit, currentRow, 1)
-        self.grid.addWidget(self.drag_dur_label, currentRow, 2)
-        self.grid.addWidget(self.drag_dur_edit, currentRow, 3)
-        currentRow += 1
-        self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
-        self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
         self.grid.addWidget(self.follow_ROI_mode_title, currentRow, 2, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.saving_title, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.analysis_control_title, currentRow, 0, 1, 2)
         self.grid.addWidget(self.roiFollowingModesPar_label, currentRow, 2)
         self.grid.addWidget(self.roiFollowingModesPar, currentRow, 3)
         self.grid.addWidget(self.followROIModeCheck, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 0)
-        self.grid.addWidget(self.autoSaveCheck, currentRow, 1)
+        self.grid.addWidget(self.lines_analysis_label, currentRow, 0)
+        self.grid.addWidget(self.lines_analysis_edit, currentRow, 1)
         self.grid.addWidget(self.follow_roi_interval_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_interval_edit, currentRow, 3)
         currentRow += 1
+        self.grid.addWidget(self.plotROICheck, currentRow, 0)
+        self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 1)
         self.grid.addWidget(self.follow_roi_redetectthresh_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_redetectthresh_edit, currentRow, 3)
         currentRow += 1
-        self.grid.addWidget(self.binary_neg_title, currentRow, 2, 1, 3)
+        self.grid.addWidget(self.init_frames_label, currentRow, 0)
+        self.grid.addWidget(self.init_frames_edit, currentRow, 1)
+        self.grid.addWidget(self.saving_title, currentRow, 2, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.bin_neg_smooth_label, currentRow, 2)
-        self.grid.addWidget(self.bin_neg_smooth_edit, currentRow, 3)
-        currentRow += 1
-        self.grid.addWidget(self.bin_neg_thresh_label, currentRow, 2)
-        self.grid.addWidget(self.bin_neg_thresh_edit, currentRow, 3)
+        self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
+        self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
+        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 3)
+        self.grid.addWidget(self.autoSaveCheck, currentRow, 4)
+
+        frame_gm = self.frameGeometry()
+        topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
+        print(topLeftPoint.x())
+        print(topLeftPoint.y())
+        frame_gm.moveTopLeft(topLeftPoint)
+        self.move(frame_gm.topLeft())
 
     def resetHelpWidget(self):
         self.analysisHelpWidget = AnalysisWidget()
@@ -347,12 +328,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_exc_laser_par.addItems(self.mfx_exc_lasers)
         self.mfx_exc_laser_par.setCurrentIndex(0)
 
-    def setRepeatMeasCalibrationButtonText(self, coords):
-        self.setRepeatMeasCalibrationButton.setText(f'Rep. meas. calib.: [{coords[0]},{coords[1]}]')
-
-    def setMFXROICalibrationButtonText(self, coords):
-        self.setMFXROICalibrationButton.setText(f'Set MFX ROI calib.: [{coords[0]},{coords[1]}]')
-
     def launchHelpWidget(self, widget, init=True):
         """ Launch the help widget. """
         if init:
@@ -392,6 +367,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.levelMaxLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.levelMaxEdit = QtWidgets.QLineEdit(str(1))
         self.levelMaxEdit.setMaximumWidth(50)
+        #self.mousePositionLabel = pg.LabelItem(text='Cursor: [nan, nan]', justify="right")
         
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
@@ -402,8 +378,27 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.levelMinEdit, 0, 2)
         self.grid.addWidget(self.levelMaxLabel, 0, 3)
         self.grid.addWidget(self.levelMaxEdit, 0, 4)
-        self.grid.addWidget(self.setLevelsButton, 0, 5)
-        self.grid.addWidget(self.imgVbWidget, 1, 0, 1, 6)
+        #self.grid.addWidget(self.mousePositionLabel, 0, 5)
+        self.grid.addWidget(self.setLevelsButton, 0, 6)
+        self.grid.addWidget(self.imgVbWidget, 1, 0, 1, 7)
+
+        frame_gm = self.frameGeometry()
+        topLeftPoint = QPoint(0,700)
+        frame_gm.moveTopLeft(topLeftPoint)
+        self.move(frame_gm.topLeft())
+
+    #    try:
+    #        # set up mouse signal proxy to label current mouse hover position in image
+    #        pg.SignalProxy(self.scatterPlot.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
+    #    except:
+    #        pass
+
+    #def mouseMoved(self, evt):
+    #    try:
+    #        mousePoint = self.scatterPlot.vb.mapSceneToView(evt[0])
+    #        self.mousePositionLabel.setText(f'Cursor: [{mousePoint.x()}, {mousePoint.y()}]')
+    #    except:
+    #        pass
 
     def removeROIs(self):
         for roi in self.rois_draw:
@@ -422,7 +417,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.imgVb.addItem(roi)
 
     def addWidgetRight(self, widget):
-        self.grid.addWidget(widget, 1, 6, 1, 1)
+        self.grid.addWidget(widget, 1, 7, 1, 1)
 
 
 class CoordListWidget(QtWidgets.QWidget):
@@ -463,8 +458,15 @@ class CoordTransformWidget(QtWidgets.QWidget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # create buttons
         self.saveCalibButton = QtWidgets.QPushButton('Save calibration')
         self.loadCalibButton = QtWidgets.QPushButton('Load calibration')
+        self.setMFXROICalibrationButton = QtWidgets.QPushButton('Set MFX ROI calib.')
+        self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Rep. meas. calib.')
+        self.setSaveDirButton = QtWidgets.QPushButton('Choose save directory')
+        self.save_dir_edit = QtWidgets.QLineEdit('Default data folder')
+        self.save_dir_edit.setEnabled(False)
 
         # add all previous transforms in folder to be loaded
         self.transformCalibrations = list()
@@ -490,40 +492,80 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.conf_size_px_label = QtWidgets.QLabel('Confocal image size, scan (px)')
         self.conf_size_px_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.conf_size_px_edit = QtWidgets.QLineEdit(str(0))
+        # time sleeps and drag durations
+        self.time_sleep_label = QtWidgets.QLabel('Time sleeps (s)')
+        self.time_sleep_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.time_sleep_edit = QtWidgets.QLineEdit(str(0.3))
+        self.time_sleep_roiswitch_label = QtWidgets.QLabel('Time sleeps - ROI switch (s)')
+        self.time_sleep_roiswitch_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.time_sleep_roiswitch_edit = QtWidgets.QLineEdit(str(1))
+        self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
+        self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
+
+        # Create titles
+        self.gui_calibration_title = QtWidgets.QLabel('GUI calibration')
+        self.gui_calibration_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.gui_calibration_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.coord_transform_title = QtWidgets.QLabel('Coordinate transform')
+        self.coord_transform_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.coord_transform_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.timing_title = QtWidgets.QLabel('Timing and other')
+        self.timing_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.timing_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
 
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
     
         currentRow = 0
+        self.grid.addWidget(self.coord_transform_title, currentRow, 1)
+        currentRow += 1
         self.grid.addWidget(self.transformCalibrationsPar_label, currentRow, 0)
         self.grid.addWidget(self.transformCalibrationsPar, currentRow, 1)
         self.grid.addWidget(self.loadCalibButton, currentRow, 2)
-
         currentRow += 1
         self.grid.addWidget(self.conf_top_x_mon_label, currentRow, 0)
         self.grid.addWidget(self.conf_top_x_mon_edit, currentRow, 1)
         self.grid.addWidget(self.conf_top_left_mon_button, currentRow, 2)
-
         currentRow += 1
         self.grid.addWidget(self.conf_top_y_mon_label, currentRow, 0)
         self.grid.addWidget(self.conf_top_y_mon_edit, currentRow, 1)
-        
         currentRow += 1
         self.grid.addWidget(self.conf_size_px_mon_label, currentRow, 0)
         self.grid.addWidget(self.conf_size_px_mon_edit, currentRow, 1)
         self.grid.addWidget(self.conf_bottom_right_mon_button, currentRow, 2)
-
         currentRow += 1
         self.grid.addWidget(self.conf_size_um_label, currentRow, 0)
         self.grid.addWidget(self.conf_size_um_edit, currentRow, 1)
-
         currentRow += 1
         self.grid.addWidget(self.conf_size_px_label, currentRow, 0)
         self.grid.addWidget(self.conf_size_px_edit, currentRow, 1)
-
+        self.grid.addWidget(self.saveCalibButton, currentRow, 2)
         currentRow += 1
-        self.grid.addWidget(self.saveCalibButton, currentRow, 0)
+        self.grid.addWidget(self.gui_calibration_title, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 0)
+        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.timing_title, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.time_sleep_label, currentRow, 0)
+        self.grid.addWidget(self.time_sleep_edit, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 0)
+        self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.drag_dur_label, currentRow, 0)
+        self.grid.addWidget(self.drag_dur_edit, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.setSaveDirButton, currentRow, 0)
+        self.grid.addWidget(self.save_dir_edit, currentRow, 1, 1, 2)
+        
+        frame_gm = self.frameGeometry()
+        topLeftPoint = QPoint(0,660)
+        frame_gm.moveTopLeft(topLeftPoint)
+        self.move(frame_gm.topLeft())
 
     def setCalibrationList(self, calibrationsDir):
         """ Set combobox with available coordinate transformations to use. """
@@ -533,7 +575,19 @@ class CoordTransformWidget(QtWidgets.QWidget):
                 self.transformCalibrations.append(transform)
         self.transformCalibrations = list(reversed(self.transformCalibrations))
         self.transformCalibrationsPar.addItems(self.transformCalibrations)
-        self.transformCalibrationsPar.setCurrentIndex(0)        
+        self.transformCalibrationsPar.setCurrentIndex(0)
+
+    def setRepeatMeasCalibrationButtonText(self, coords):
+        self.setRepeatMeasCalibrationButton.setText(f'Rep. meas. calib.: [{coords[0]},{coords[1]}]')
+
+    def setMFXROICalibrationButtonText(self, coords):
+        self.setMFXROICalibrationButton.setText(f'Set MFX ROI calib.: [{coords[0]},{coords[1]}]')
+
+    def getSaveFolder(self):
+        return askdirectory(title='Select folder...')
+    
+    def setSaveFolderField(self, folder):
+        self.save_dir_edit.setText(folder)
 
 
 # Copyright (C) 2023-2023 Jonatan Alvelid

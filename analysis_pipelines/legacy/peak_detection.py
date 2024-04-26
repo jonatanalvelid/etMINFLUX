@@ -4,7 +4,7 @@ from skimage import measure
 import cv2
 import math
 
-def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exinfo=None, presetROIsize=None,
+def peak_detection(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                    maxfilter_kersize=5, peak_min_dist=7, thresh_abs=2, num_peaks=50, smoothing_radius=1, 
                    border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6):
     """
@@ -105,7 +105,5 @@ def peak_detection(img, prev_frames=None, binary_mask=None, testmode=False, exin
 
     coordinates = np.flip(coordinates, axis=1)  # seems to be needed in this pipeline
 
-    if testmode:
-        return coordinates, roi_sizes, exinfo, img_ana
-    else:
-        return coordinates, roi_sizes, exinfo
+
+    return coordinates, roi_sizes, exinfo, img_ana
