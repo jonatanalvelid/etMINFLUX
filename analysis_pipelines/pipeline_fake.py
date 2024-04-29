@@ -1,6 +1,6 @@
 import numpy as np
 
-def aa_pipeline_fake(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, xcoord=300, ycoord=300):
+def pipeline_fake(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, xcoord=300, ycoord=300):
     roi_sizes = False
     coordinates = np.array([[xcoord, ycoord]])
     if not presetROIsize:

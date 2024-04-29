@@ -21,8 +21,6 @@ import pyqtgraph as pg
 
 warnings.filterwarnings("ignore")
 
-_transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-#_transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
 
 def thread_info(msg):
     print(msg, int(QtCore.QThread.currentThreadId()), threading.current_thread().name)
@@ -41,6 +39,8 @@ class EtMINFLUXController(QtCore.QObject):
         # set default data dir
         self._dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
         #self._dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
+        self._transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+        #sef._transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
 
         # open imspector connection
@@ -73,7 +73,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setMinfluxExcLaserList(self.mfxExcLaserList)
 
         # create a helper controller for the coordinate transform pop-out widget
-        self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget, _transformsDir)
+        self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget, self._transformsDir)
         self.__analysisHelper = AnalysisImgHelper(self, self._widget.analysisHelpWidget)
 
         # Connect EtMINFLUXWidget button and check box signals
@@ -111,8 +111,16 @@ class EtMINFLUXController(QtCore.QObject):
         self.confPauseTimer.timeout.connect(self.startConfocalScanning)
         self.confPauseTimerThread.started.connect(self.confPauseTimer.start)
 
-        self.helpPlotDetectedCoordsSignal.connect(self.plotDetectedCoords)
+        # create timers for confocal intermittent pause countdown timer showing
+        self.confPauseGUICountdownTimerThread = QtCore.QThread(self)
+        self.confPauseGUICountdownTimer = QtCore.QTimer()
+        self.confPauseGUICountdownTimer.moveToThread(self.confPauseGUICountdownTimerThread)
+        self.confPauseGUICountdownTimer.setSingleShot(False)
+        self.confPauseGUICountdownTimer.timeout.connect(self.updateIntervalTimerDisp)
+        self.confPauseGUICountdownTimerThread.started.connect(self.confPauseGUICountdownTimer.start)
+        self.confIntervalDispTimer = QtCore.QElapsedTimer()
 
+        self.helpPlotDetectedCoordsSignal.connect(self.plotDetectedCoords)
 
         # initiate log for each detected event
         self.resetDetLog()
@@ -126,6 +134,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.initiatePlottingParams()
         # get timings from GUI
         self.getTimings()
+
 
     def initiateFlagsParams(self):
         # initiate flags and params
@@ -220,6 +229,9 @@ class EtMINFLUXController(QtCore.QObject):
                 self.__confocalLinesAnalysisPeriod = int(self._widget.lines_analysis_edit.text())
             else:
                 self.__confocalLinesAnalysisPeriod = self.__confocalLinesFrame
+            # if confocal frame pause, read pause value
+            if self.__confocalFramePause:
+                self.pausetime = int(self._widget.conf_frame_pause_edit.text()) * 1000  # time in ms
             # read number of initial frames without analysis
             self.__init_frames = int(self._widget.init_frames_edit.text()) - 1
             # start confocal imaging loop (in its own thread, to wait for the .run() function that returns a status when the frame finished (or is it measurement?))
@@ -227,6 +239,7 @@ class EtMINFLUXController(QtCore.QObject):
             self.startConfocalScanning()
             self._widget.initiateButton.setText('Stop')
             self.__running = True
+            self.setDetLogLine('experiment_start', None)
         elif self.__runningMFX:
             if self.recTimeTimer.isActive():
                 self.recTimeTimer.stop()
@@ -234,10 +247,11 @@ class EtMINFLUXController(QtCore.QObject):
             self.stopMFX()
             self.scanEnded()
         else:
-            # save validation images
+            # save log and confocal data
             filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
-            # save confocal data leading up to event image
-            self.saveValidationImages(prev=True, prev_ana=True, path_prefix=filename_prefix)
+            if self.__runMode == RunMode.Experiment:
+                self.saveDetLog(filename_prefix)
+                self.saveValidationImages(prev=True, prev_ana=True, path_prefix=filename_prefix)
             # disconnect signals and reset parameters
             self._imspector.disconnect_end(self.imspectorLineEvent, 1)  # disconnect Imspector confocal image frame finished to running pipeline
             self._imspector.pause()
@@ -279,13 +293,22 @@ class EtMINFLUXController(QtCore.QObject):
     def confocalIntermittentPause(self):
         if self.confPauseTimer.isActive():
             self.confPauseTimer.stop()
+            self.confPauseGUICountdownTimer.stop()
         self.confPauseTimerThread.quit()
+        self.confPauseGUICountdownTimerThread.quit()
         self._imspector.pause()
         self.startConfPauseTimer()
 
-    def startConfocalScanning(self):
-        self._imspector.disconnect_end(self.imspectorLineEvent, 1)
-        self._imspector.connect_end(self.imspectorLineEvent, 1)
+    def startConfocalScanning(self, reconnect_signal=True):
+        ############ OFFICE DEBUGGING #########
+        # meas = self._imspector.active_measurement()
+        # self.img = np.squeeze(meas.stack(0).data()[0])
+        # self.setAnalysisHelpImg(self.img)
+        # self.plotDetectedCoords([[10,10], [40,190], [130,40]], [[10,10], [10,10], [10,10]])
+        ############
+        if reconnect_signal:
+            self._imspector.disconnect_end(self.imspectorLineEvent, 1)
+            self._imspector.connect_end(self.imspectorLineEvent, 1)
         self.__confocalLineAnalysisCurr = 0
         self.__confocalLineFrameCurr = 0
         self.__confocalLineCurr = 0
@@ -293,26 +316,12 @@ class EtMINFLUXController(QtCore.QObject):
         meas = self._imspector.active_measurement()
         cfg = meas.configuration(self.__conf_config)
         meas.activate(cfg)
-        # set repeat measurement and start scan
+        # set repeat measurement - start scan
         time.sleep(self._sleepTime)
         mouse.move(*self.__coordTransformHelper._set_repeat_meas_button_pos)
         mouse.click()
-        # if instead want to run a single frame
-        ## start scan
+        # run a single frame - start scan
         #self._imspector.start()
-
-    def startConfocalScanningBinary(self):
-        self.__confocalLineAnalysisCurr = 0
-        self.__confocalLineFrameCurr = 0
-        self.__confocalLineCurr = 0
-        # ensure activate configuration is conf overview
-        meas = self._imspector.active_measurement()
-        cfg = meas.configuration(self.__conf_config)
-        meas.activate(cfg)
-        # set repeat measurement and start scan
-        time.sleep(self._sleepTime)
-        mouse.move(*self.__coordTransformHelper._set_repeat_meas_button_pos)
-        mouse.click()
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
@@ -398,25 +407,34 @@ class EtMINFLUXController(QtCore.QObject):
 
     def endExperiment(self):
         """ Save all etMINFLUX scan metadata/log file and data. """
-        self.setDetLogLine("pipeline", self.getPipelineName())
-        self.logPipelineParamVals()
-        # log recording mode and rec time, if exisiting
-        if self.__presetRecTime:
-            self.setDetLogLine("MFXRecTime", self.__rec_time_scan)
-        #TODO Add log recording mode, if following ROI. Tricky, as it False:s the followingROI parameter before entering here (when unclicking box to stop it). Create another parameter when falsing it if actively scanning? Or is unclicking box not a good way to stop it?
-        # save log file with temporal info of trigger event
+        # save log and confocal data leading up to event image
         filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
-        name = os.path.join(self._dataDir, filename_prefix) + '_log'
-        savename = getUniqueName(name)
-        log = [f'{key}: {self.__detLog[key]}' for key in self.__detLog]
-        with open(f'{savename}.txt', 'w') as f:
-            [f.write(f'{st}\n') for st in log]
-        self.resetDetLog()
-        # save confocal data leading up to event image
+        self.saveDetLog(filename_prefix)
         self.saveValidationImages(prev=True, prev_ana=True, path_prefix=filename_prefix)
         if self.__autoSaveMeas:
             # save all MINFLUX data (including multiple ROI, if so)
             self.saveMINFLUXdata(path_prefix=filename_prefix)
+
+    def saveDetLog(self, filename_prefix):
+        if self.__detLog:
+            self.setDetLogLine("pipeline", self.getPipelineName())
+            self.logPipelineParamVals()
+            self.setDetLogLine("pipeline_runtimes", self.__pipeline_runtimes)
+            if self.__confocalFramePause:
+                self.setDetLogLine('confocal_frame_interval', self.pausetime / 1000)  # time in s
+            # log recording mode and rec time, if exisiting
+            if self.__hasRunMFX:
+                if self.__presetRecTime:
+                    self.setDetLogLine("MFXRecTime", self.__rec_time_scan)
+            #TODO Add log recording mode, if following ROI. Tricky, as it False:s the followingROI parameter before entering here (when unclicking box to stop it). Create another parameter when falsing it if actively scanning? Or is unclicking box not a good way to stop it?
+            self.setDetLogLine('experiment_end', None)
+            # save log file with temporal info of trigger event
+            name = os.path.join(self._dataDir, filename_prefix) + '_log'
+            savename = getUniqueName(name)
+            log = [f'{key}: {self.__detLog[key]}' for key in self.__detLog]
+            with open(f'{savename}.txt', 'w') as f:
+                [f.write(f'{st}\n') for st in log]
+            self.resetDetLog()
 
     def endFollowingROIStep(self):
         filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
@@ -478,7 +496,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__confocalLinesAnalysisPeriod = self._imspector.active_measurement().stack(0).sizes()[0] - 7
         self.__confocalLineCurr = 0
         self._imspector.connect_end(self.imspectorLineEventBinaryMask, 1)
-        self.startConfocalScanningBinary()
+        self.startConfocalScanning(reconnect_signal=False)
         self._widget.recordBinaryMaskButton.setText('Recording...')
 
     def resetBinaryMask(self):
@@ -560,13 +578,16 @@ class EtMINFLUXController(QtCore.QObject):
         """ Reset general pipeline run parameters. """
         self.__running = False
         self.__validating = False
+        self.__hasRunMFX = False
         self.__fast_frame = 0
         self.__post_event_frames = 0
+        self.__pipeline_runtimes = []
         self.__aoi_coords_deque = deque(maxlen=0)
         self.__aoi_sizes_deque = deque(maxlen=0)
         self.__roiFollowMultipleCurrIdx = 0
         self.__roiFollowCurrCycle = 0
         self.__followingROIContinue = False
+        self._widget.setConfPauseTimerGUINullMessage()
         self.resetTimerThreads()
 
     def resetTimerThreads(self):
@@ -576,6 +597,9 @@ class EtMINFLUXController(QtCore.QObject):
         if self.confPauseTimer.isActive():
             self.confPauseTimer.stop()
         self.confPauseTimerThread.quit()
+        if self.confPauseGUICountdownTimer.isActive():
+            self.confPauseGUICountdownTimer.stop()
+        self.confPauseGUICountdownTimerThread.quit()
 
     def generateRandomCoord(self, roi_sizes):
         """ Generate random coord inside the binary mask. """         
@@ -658,13 +682,14 @@ class EtMINFLUXController(QtCore.QObject):
         # start of pipeline
         self.__pipeline_start_file_prefix = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
         # run pipeline
-        self.setDetLogLine("pipeline_start", None)
+        self.__pipeline_start_time = time.perf_counter()
         coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
                                                                                 self.__exinfo, self.__presetROISize,
                                                                                 *self.__pipeline_param_vals)
         #print(self.__exinfo)
         #print(coords_detected)
-        self.setDetLogLine("pipeline_end", None)
+        self.__pipeline_end_time = time.perf_counter()
+        self.__pipeline_runtimes.append(round((self.__pipeline_end_time-self.__pipeline_start_time)*1e3,3))  # in ms with µs precision
         return coords_detected, roi_sizes
 
     def postPipelineVisualize(self, coords_detected, roi_sizes):
@@ -886,10 +911,10 @@ class EtMINFLUXController(QtCore.QObject):
         if logging:
             # log detected and scanning center coordinate, with different keys if running all ROIs or only one
             if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
-                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__roiFollowMultipleCurrIdx)
+                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__roiFollowMultipleCurrIdx, cycle=self.__roiFollowCurrCycle)
                 self.setDetLogLine(f"mfx_initiate-id{self.__roiFollowMultipleCurrIdx}-cycle{self.__roiFollowCurrCycle}", None)
             elif self.__followingROI:
-                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
+                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, cycle=self.__roiFollowCurrCycle)
                 self.setDetLogLine(f"mfx_initiate-cycle{self.__roiFollowCurrCycle}", None)
             elif self.__run_all_aoi:
                 self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
@@ -993,21 +1018,21 @@ class EtMINFLUXController(QtCore.QObject):
 
     def logCoordinates(self, coords_scan, coords_center_scan, roi_size, idx=None, cycle=None):
         """ Log detection and scan coordinates. """
-        if cycle and idx:
+        if cycle is not None and idx is not None:
             self.setDetLogLine(f"x_center_px-id{idx}-cycle{cycle}", coords_scan[0])
             self.setDetLogLine(f"y_center_px-id{idx}-cycle{cycle}", coords_scan[1])
             self.setDetLogLine(f"x_center_um-id{idx}-cycle{cycle}", coords_center_scan[0])
             self.setDetLogLine(f"y_center_um-id{idx}-cycle{cycle}", coords_center_scan[1])
             self.setDetLogLine(f"x_roi_size_um-id{idx}-cycle{cycle}", roi_size[0])
             self.setDetLogLine(f"y_roi_size_um-id{idx}-cycle{cycle}", roi_size[1])
-        elif cycle:
+        elif cycle is not None:
             self.setDetLogLine(f"x_center_px-cycle{cycle}", coords_scan[0])
             self.setDetLogLine(f"y_center_px-cycle{cycle}", coords_scan[1])
             self.setDetLogLine(f"x_center_um-cycle{cycle}", coords_center_scan[0])
             self.setDetLogLine(f"y_center_um-cycle{cycle}", coords_center_scan[1])
             self.setDetLogLine(f"x_roi_size_um-cycle{cycle}", roi_size[0])
             self.setDetLogLine(f"y_roi_size_um-cycle{cycle}", roi_size[1])
-        elif idx:
+        elif idx is not None:
             self.setDetLogLine(f"x_center_px-id{idx}", coords_scan[0])
             self.setDetLogLine(f"y_center_px-id{idx}", coords_scan[1])
             self.setDetLogLine(f"x_center_um-id{idx}", coords_center_scan[0])
@@ -1063,15 +1088,23 @@ class EtMINFLUXController(QtCore.QObject):
         self.recTimeTimerThread.start()
 
     def startConfPauseTimer(self):
-        self.pausetime = int(self._widget.conf_frame_pause_edit.text()) * 1000  # time in ms
         self.confPauseTimer.setInterval(self.pausetime)
         self.confPauseTimerThread.start()
+        # for display countdown timer
+        self.confPauseGUICountdownTimer.setInterval(1)
+        self.confPauseGUICountdownTimerThread.start()
+        self.confIntervalDispTimer.start()
 
     def getConfocalInterval(self):
         self.__follow_roi_confocal_interval = int(self._widget.follow_roi_interval_edit.text())
 
     def getRedetectDistThreshold(self):
         self.__follow_roi_redetectdist_threshold = int(self._widget.follow_roi_redetectthresh_edit.text())
+
+    def updateIntervalTimerDisp(self):
+        time_left = (int(self._widget.conf_frame_pause_edit.text()) * 1000 - self.confIntervalDispTimer.elapsed())/1000
+        if time_left >= 0:
+            self._widget.conf_guipausetimer_edit.setText(f'Time until confocal: {time_left:.0f} s')
 
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
@@ -1145,6 +1178,7 @@ class EtMINFLUXController(QtCore.QObject):
         """ Run event-triggered MINFLUX acquisition in small ROI. """
         self._imspector.start()
         self.__runningMFX = True
+        self.__hasRunMFX = True
 
     def stopMFX(self):
         """ Stop MINFLUX measurement. """
@@ -1313,7 +1347,7 @@ class EtCoordTransformHelper():
         #self._set_repeat_meas_button_pos = [407,65]
         #self._set_MFXROI_button_pos = [652,65]
         # lab default
-        self._set_repeat_meas_button_pos = [1338,72]
+        self._set_repeat_meas_button_pos = [1360,72]
         self._widget.setRepeatMeasCalibrationButtonText(self._set_repeat_meas_button_pos)
         self._set_MFXROI_button_pos = [1577,72]
         self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
@@ -1472,11 +1506,21 @@ class Configuration():
 
 class Stack():
     def __init__(self, *args, **kwargs):
-        self._data = np.zeros((3,100,100))
+        self._data = Data(3,100,100)
 
     def data(self):
-        return self.data
+        return self._data
 
+class Data():
+    def __init__(self, z, x, y, *args, **kwargs):
+        self._data = np.zeros((z,x,y))
+        self._sizes = (x,y)
+
+    def data(self):
+        return self._data
+    
+    def sizes(self):
+        return self._sizes    
 
 class ValueAt():
     def __init__(self, *args, **kwargs):

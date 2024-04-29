@@ -157,6 +157,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.analysis_control_title = QtWidgets.QLabel('Analysis control')
         self.analysis_control_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.analysis_control_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
+        self.conf_guipausetimer_edit_nullmessage = 'Time until confocal: not running'
+        self.conf_guipausetimer_edit = QtWidgets.QLineEdit(self.conf_guipausetimer_edit_nullmessage)
+        self.conf_guipausetimer_edit.setReadOnly(True)
+        self.conf_guipausetimer_edit.setStyleSheet("color: gray;")
 
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
@@ -257,11 +261,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
         self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 3)
         self.grid.addWidget(self.autoSaveCheck, currentRow, 4)
+        currentRow += 1
+        currentRow += 1
+        self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
-        print(topLeftPoint.x())
-        print(topLeftPoint.y())
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
 
@@ -327,6 +332,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_exc_lasers = excLasers
         self.mfx_exc_laser_par.addItems(self.mfx_exc_lasers)
         self.mfx_exc_laser_par.setCurrentIndex(0)
+    
+    def setConfPauseTimerGUINullMessage(self):
+        self.conf_guipausetimer_edit.setText(self.conf_guipausetimer_edit_nullmessage)
 
     def launchHelpWidget(self, widget, init=True):
         """ Launch the help widget. """
@@ -342,7 +350,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         super().__init__(*args, **kwargs)
 
         self.imgVbWidget = pg.GraphicsLayoutWidget()
-        self.imgVb = self.imgVbWidget.addViewBox(row=1, col=1)
+        self.imgVb = pg.PlotItem(axisItems={'left': pg.AxisItem('left'), 'bottom': pg.AxisItem('bottom')})
+        self.imgVbWidget.addItem(self.imgVb, row=1, col=1)
 
         self.img = pg.ImageItem(axisOrder = 'row-major')
         #self.img.translate(-0.5, -0.5)
@@ -383,7 +392,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.imgVbWidget, 1, 0, 1, 7)
 
         frame_gm = self.frameGeometry()
-        topLeftPoint = QPoint(0,700)
+        topLeftPoint = QPoint(0,670)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
 
@@ -563,7 +572,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.save_dir_edit, currentRow, 1, 1, 2)
         
         frame_gm = self.frameGeometry()
-        topLeftPoint = QPoint(0,660)
+        topLeftPoint = QPoint(0,670)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
 
