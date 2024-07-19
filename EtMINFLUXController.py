@@ -65,7 +65,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setTransformations(self.transformDir)
 
         # list of minflux sequences that can be triggered
-        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast', 'ja_triangle_dmp_lipids', 'ak_hex_dmp1_100kHzbgc_13phtlim']  # make sure that these options matches exactly those in Imspector
+        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast', 'ja_triangle_dmp_lipids', 'ak_hex_dmp1_100kHzbgc_13phtlim', 'ak_hex_dmp1_80kHzbgc_8phtlim']  # make sure that these options matches exactly those in Imspector
         self._widget.setMfxSequenceList(self.mfxSeqList)
 
         # list of available lasers for MFX imaging, get this list manually from Imspector control software
@@ -790,7 +790,7 @@ class EtMINFLUXController(QtCore.QObject):
                 else:
                     roi_size = None
                 self._widget.initiateButton.setText('Next ROI')  
-            elif self.__followingROI and (self.__followingROIMode == ROIFollowMode.SingleRedetect or self.__followingROIMode == ROIFollowMode.Single) and self.__exinfo is not None and pipelinename=='peak_detection_def':
+            elif self.__followingROI and (self.__followingROIMode == ROIFollowMode.SingleRedetect or self.__followingROIMode == ROIFollowMode.Single) and self.__exinfo is not None and pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand':
                 # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = int(self.__exinfo)
                 if idx < np.size(coords_detected):
@@ -804,9 +804,36 @@ class EtMINFLUXController(QtCore.QObject):
                         else:
                             roi_size = roi_sizes[0]
                     else:
-                        roi_size = None   
+                        roi_size = None
                 else:
-                    coords_scan = coords_detected[0]
+                    if np.size(coords_detected) > 2:
+                        coords_scan = coords_detected[0,:]
+                    else:
+                        coords_scan = coords_detected[0]
+                    if not self.__presetROISize:
+                        roi_size = roi_sizes[0]
+                    else:
+                        roi_size = None
+            elif self.__exinfo is not None and pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand':
+                # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
+                idx = int(self.__exinfo)
+                if idx < np.size(coords_detected):
+                    if np.size(coords_detected) > np.max([2,idx]):
+                        coords_scan = coords_detected[idx,:]
+                    else:
+                        coords_scan = coords_detected[0]
+                    if not self.__presetROISize:
+                        if np.size(coords_detected) > np.max([2,idx]):
+                            roi_size = roi_sizes[idx]
+                        else:
+                            roi_size = roi_sizes[0]
+                    else:
+                        roi_size = None
+                else:
+                    if np.size(coords_detected) > 2:
+                        coords_scan = coords_detected[0,:]
+                    else:
+                        coords_scan = coords_detected[0]
                     if not self.__presetROISize:
                         roi_size = roi_sizes[0]
                     else:
@@ -1347,9 +1374,9 @@ class EtCoordTransformHelper():
         #self._set_repeat_meas_button_pos = [407,65]
         #self._set_MFXROI_button_pos = [652,65]
         # lab default
-        self._set_repeat_meas_button_pos = [1360,72]
+        self._set_repeat_meas_button_pos = [1328,72]
         self._widget.setRepeatMeasCalibrationButtonText(self._set_repeat_meas_button_pos)
-        self._set_MFXROI_button_pos = [1577,72]
+        self._set_MFXROI_button_pos = [1555,72]
         self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
 
         self.calibrationLoad()
