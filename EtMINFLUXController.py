@@ -718,6 +718,7 @@ class EtMINFLUXController(QtCore.QObject):
         colors = [self.popColor() for _ in range(len(coords_detected))]
         self.__analysisHelper.plotScatter(coords_detected, colors=colors)
         self.__analysisHelper.plotRoiRectangles(coords_detected, roi_sizes, colors=colors, presetROISize=self.__presetROISize)
+        self.__analysisHelper.updateNumberEventsDisp(numEvents=len(coords_detected))
         if self.__presetROISize:
             roi_sizes = self.getPresetRoiSize(len(coords_detected))
         self._widget.coordListWidget.addCoords(coords_detected, roi_sizes, colors)
@@ -1353,6 +1354,9 @@ class AnalysisImgHelper():
             self._widget.rois_draw.append(roi_temp)
         # draw ROIs
         self._widget.drawROIs()
+
+    def updateNumberEventsDisp(self, numEvents):
+        self._widget.coordListWidget.numevents_edit.setText(f'Number of detected events: {numEvents}')
 
 
 class EtCoordTransformHelper():

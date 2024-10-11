@@ -434,15 +434,21 @@ class CoordListWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.list = QtWidgets.QListWidget()
+        self.list.setVerticalScrollMode(QtWidgets.QListWidget.ScrollPerPixel)
 
-        # create buttons for control of the ROI list
+        # create widget fields for the ROI list
         self.delROIButton = QtWidgets.QPushButton('Delete ROI')
-
+        self.numevents_edit_nullmessage = 'Number of detected events: not running'
+        self.numevents_edit = QtWidgets.QLineEdit(self.numevents_edit_nullmessage)
+        self.numevents_edit.setReadOnly(True)
+        self.numevents_edit.setStyleSheet("color: gray;")
+        
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
         self.grid.addWidget(self.delROIButton, 0, 0)
-        self.grid.addWidget(self.list, 1, 0)
+        self.grid.addWidget(self.numevents_edit, 1, 0)
+        self.grid.addWidget(self.list, 2, 0)
 
     def addCoords(self, coord_list, roi_sizes, colors):
         self.clearList()
