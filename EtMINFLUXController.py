@@ -800,32 +800,33 @@ class EtMINFLUXController(QtCore.QObject):
                     roi_size = self.__aoi_sizes_deque.popleft()
                 else:
                     roi_size = None
-                self._widget.initiateButton.setText('Next ROI')  
-            elif self.__followingROI and (self.__followingROIMode == ROIFollowMode.SingleRedetect or self.__followingROIMode == ROIFollowMode.Single) and self.__exinfo is not None and pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand':
-                # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
-                idx = int(self.__exinfo)
-                if idx < np.size(coords_detected):
-                    if np.size(coords_detected) > np.max([2,idx]):
-                        coords_scan = coords_detected[idx,:]
-                    else:
-                        coords_scan = coords_detected[0]
-                    if not self.__presetROISize:
-                        if np.size(coords_detected) > np.max([2,idx]):
-                            roi_size = roi_sizes[idx]
-                        else:
-                            roi_size = roi_sizes[0]
-                    else:
-                        roi_size = None
-                else:
-                    if np.size(coords_detected) > 2:
-                        coords_scan = coords_detected[0,:]
-                    else:
-                        coords_scan = coords_detected[0]
-                    if not self.__presetROISize:
-                        roi_size = roi_sizes[0]
-                    else:
-                        roi_size = None
-            elif self.__exinfo is not None and pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand':
+                self._widget.initiateButton.setText('Next ROI')
+            ### TODO: TEST IF REMOVING THIS BREAKS ROIFOLLOWMODE SINGLE AND SINGLEREDECT, OR IF IT BREAKS PEAK-DETECTION-DEF OR PEAK-DET-RAND PIPELINES (SHOULD NOT AS PER ELIF BELOW)
+            #elif self.__followingROI and (self.__followingROIMode == ROIFollowMode.SingleRedetect or self.__followingROIMode == ROIFollowMode.Single) and self.__exinfo is not None and pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand':
+            #    # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
+            #    idx = int(self.__exinfo)
+            #    if idx < np.size(coords_detected):
+            #        if np.size(coords_detected) > np.max([2,idx]):
+            #            coords_scan = coords_detected[idx,:]
+            #        else:
+            #            coords_scan = coords_detected[0]
+            #        if not self.__presetROISize:
+            #            if np.size(coords_detected) > np.max([2,idx]):
+            #                roi_size = roi_sizes[idx]
+            #            else:
+            #                roi_size = roi_sizes[0]
+            #        else:
+            #            roi_size = None
+            #    else:
+            #        if np.size(coords_detected) > 2:
+            #            coords_scan = coords_detected[0,:]
+            #        else:
+            #            coords_scan = coords_detected[0]
+            #        if not self.__presetROISize:
+            #            roi_size = roi_sizes[0]
+            #        else:
+            #            roi_size = None
+            elif self.__exinfo is not None and (pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand'):
                 # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = int(self.__exinfo)
                 if idx < np.size(coords_detected):
