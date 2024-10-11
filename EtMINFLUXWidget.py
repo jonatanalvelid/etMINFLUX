@@ -76,18 +76,21 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # create check box for confocal monitoring pausing between frames
         self.confocalFramePauseCheck = QtWidgets.QCheckBox('Confocal frame pause (s)')
         # create editable fields for binary mask calculation threshold and smoothing
-        self.bin_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
+        self.bin_thresh_label = QtWidgets.QLabel('Bin. pos. threshold (cnts)')
         self.bin_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_thresh_edit = QtWidgets.QLineEdit(str(10))
-        self.bin_smooth_label = QtWidgets.QLabel('Bin. smooth (px)')
+        self.bin_smooth_label = QtWidgets.QLabel('Bin. pos. smooth (px)')
         self.bin_smooth_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_smooth_edit = QtWidgets.QLineEdit(str(2))
-        self.bin_neg_thresh_label = QtWidgets.QLabel('Bin. threshold (cnts)')
+        self.bin_neg_thresh_label = QtWidgets.QLabel('Bin. neg. threshold (cnts)')
         self.bin_neg_thresh_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_neg_thresh_edit = QtWidgets.QLineEdit(str(10))
-        self.bin_neg_smooth_label = QtWidgets.QLabel('Bin. smooth (px)')
+        self.bin_neg_smooth_label = QtWidgets.QLabel('Bin. neg. smooth (px)')
         self.bin_neg_smooth_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.bin_neg_smooth_edit = QtWidgets.QLineEdit(str(2))
+        self.bin_border_size_label = QtWidgets.QLabel('Bin. border size (px)')
+        self.bin_border_size_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.bin_border_size_edit = QtWidgets.QLineEdit(str(15))
         # create editable field for number of initial frames without analysis
         self.init_frames_label = QtWidgets.QLabel('Initial frames')
         self.init_frames_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -139,9 +142,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.binary_title = QtWidgets.QLabel('Binary mask')
         self.binary_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.binary_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
-        self.binary_neg_title = QtWidgets.QLabel('Binary negative mask')
-        self.binary_neg_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-        self.binary_neg_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
         self.minflux_title = QtWidgets.QLabel('MINFLUX imaging parameters')
         self.minflux_title.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
         self.minflux_title.setFont(QtGui.QFont("Arial", weight=QtGui.QFont.Bold))
@@ -201,13 +201,14 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
         self.grid.addWidget(self.resetBinaryMaskButton, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.binary_neg_title, currentRow, 2, 1, 3)
-        currentRow += 1
         self.grid.addWidget(self.bin_neg_smooth_label, currentRow, 2)
         self.grid.addWidget(self.bin_neg_smooth_edit, currentRow, 3)
         currentRow += 1
         self.grid.addWidget(self.bin_neg_thresh_label, currentRow, 2)
         self.grid.addWidget(self.bin_neg_thresh_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_border_size_label, currentRow, 2)
+        self.grid.addWidget(self.bin_border_size_edit, currentRow, 3)
         currentRow += 1
         self.grid.addWidget(self.minflux_title, currentRow, 2, 1, 3)
         currentRow += 1

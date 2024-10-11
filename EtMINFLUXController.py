@@ -40,7 +40,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
         #self._dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
         self._transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-        #sef._transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
+        #self._transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
 
         # open imspector connection
@@ -200,6 +200,7 @@ class EtMINFLUXController(QtCore.QObject):
             self.__pipeline_param_vals = self.readPipelineParams()
             # reset general run parameters
             self.resetRunParams()
+            self.clearConfocalData()
             # Reset parameter for extra information that pipelines can input and output
             self.__exinfo = None
 
@@ -270,6 +271,11 @@ class EtMINFLUXController(QtCore.QObject):
                 self.__followingROIMode = ROIFollowMode.Multiple
             elif roiFollowMode == 'SingleRedetect':
                 self.__followingROIMode = ROIFollowMode.SingleRedetect
+
+    def clearConfocalData(self):
+        """ Clear confocal data deques. """
+        self.__prevFrames.clear()
+        self.__prevAnaFrames.clear()
 
     def finishMFXROIAuto(self):
         """ Trigger this when a preset-rec-time MFX ROI has finished. """
@@ -523,8 +529,12 @@ class EtMINFLUXController(QtCore.QObject):
         img_bin_neg = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_neg_smooth_edit.text()))
         img_bin_pos = np.array(img_bin_pos > float(self._widget.bin_thresh_edit.text()))
         img_bin_neg = np.array(img_bin_neg < float(self._widget.bin_neg_thresh_edit.text()))
+        img_bin_border = np.zeros(np.shape(img_bin_pos))
+        border_size = int(self._widget.bin_border_size_edit.text())
+        img_bin_border[border_size:-border_size, border_size:-border_size] = 1
         #self.__binary_mask = np.array(img_bin > float(self._widget.bin_thresh_edit.text()))  # Use this if want to go back to only positive mask
-        self.__binary_mask = np.logical_and(img_bin_pos, img_bin_neg)
+        #self.__binary_mask = np.logical_and(img_bin_pos, img_bin_neg)  # Use this if want to go back to positive AND negative mask
+        self.__binary_mask = np.logical_and(np.logical_and(img_bin_pos, img_bin_neg), img_bin_border)
         self._widget.recordBinaryMaskButton.setText('Record binary mask')
         self.setAnalysisHelpImg(self.__binary_mask)
         self._imspector.disconnect_end(self.imspectorLineEventBinaryMask, 1)
@@ -1217,10 +1227,9 @@ class EtMINFLUXController(QtCore.QObject):
         """ Save the validation fast images of an event detection, fast images and/or preprocessed analysis images. """
         if prev:
             self._saveImage(self.__prevFrames, path_prefix, 'conf-raw')
-            self.__prevFrames.clear()
         if prev_ana:
             self._saveImage(self.__prevAnaFrames, path_prefix, 'conf-analysisprocessed')
-            self.__prevAnaFrames.clear()
+        self.clearConfocalData()
 
     def saveMINFLUXdata(self, path_prefix='YMD-HMS'):
         meas = self._imspector.active_measurement()
@@ -1441,6 +1450,8 @@ class EtCoordTransformHelper():
         name = datetime.now().strftime('%y%m%d-%Hh%Mm')
         filename = os.path.join(self.__saveFolder, name) + self.__calibNameSuffix
         np.savetxt(fname=filename, X=self.__transformCoeffs)
+        # reset confocal image deques, in case confocal image size changed
+        self.etMINFLUXController.clearConfocalData()
 
     def calibrationLoad(self):
         """ Load a previously saved transformation calibration. """
