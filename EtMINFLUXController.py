@@ -65,7 +65,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setTransformations(self.transformDir)
 
         # list of minflux sequences that can be triggered
-        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast', 'ja_triangle_dmp_lipids', 'ak_hex_dmp1_100kHzbgc_13phtlim', 'ak_hex_dmp1_80kHzbgc_8phtlim']  # make sure that these options matches exactly those in Imspector
+        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast', 'ja_triangle_dmp_lipids', 'ja_Trk2Dtriangle_dyn1etMINFLUX', 'ja_Trk2Dtriangle_cav1etMINFLUX', 'ak_hex_dmp1_100kHzbgc_13phtlim', 'ak_hex_dmp1_80kHzbgc_8phtlim', 'ak_hex_dmp1_100kHzbgc_12phtlim', 'ak_hex_dmp1_46kHzbgc_5phtlim', 'ak_hex_dmp1_60kHzbgc_8phtlim', 'ak_hex_dmp1_84kHzbgc_10phtlim', 'ak_hex_dmp1_50kHzbgc_6phtlim', 'ja_seqTrk3D_May2024-SR-40uW', 'ja_Trk2Dtriangle_confmfxoverlap']  # make sure that these options matches exactly those in Imspector
         self._widget.setMfxSequenceList(self.mfxSeqList)
 
         # list of available lasers for MFX imaging, get this list manually from Imspector control software
@@ -827,6 +827,7 @@ class EtMINFLUXController(QtCore.QObject):
             #        else:
             #            roi_size = None
             elif self.__exinfo is not None and (pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand'):
+                self._widget.initiateButton.setText('Next ROI')  
                 # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = int(self.__exinfo)
                 if idx < np.size(coords_detected):
