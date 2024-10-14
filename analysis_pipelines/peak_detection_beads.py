@@ -1,12 +1,10 @@
 import numpy as np
 from scipy import ndimage as ndi
-from skimage import measure
 import cv2
-import math
 
-def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                          maxfilter_kersize=5, peak_min_dist=30, thresh_abs=7, num_peaks=25, smoothing_radius=1, 
-                          border_limit=15, init_smooth=1, roi_border=5, roi_th_factor=6):
+def peak_detection_beads(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+                       maxfilter_kersize=5, thresh_abs=10, smoothing_radius=1, init_smooth=1, 
+                       border_limit=15, coord_num_lim_lo=10, coord_num_lim_hi=25):
     """
     Common parameters:
     img - current image,
@@ -17,11 +15,8 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, 
 
     Pipeline specific parameters:
     maxfilter_kersize - size of kernel for maximum filtering
-    peak_min_dist - minimum distance in pixels between two peaks
     thresh_abs - low intensity threshold in img_ana of the peaks to consider
-    num_peaks - number of peaks to track
     smoothing_radius - diameter of Gaussian smoothing of img_ana, in pixels
-    ensure_spacing - to ensure spacing between detected peaks or not (bool 0/1)
     border_limit - how much of the border to remove peaks from in pixels
     init_smooth - if to perform an initial smoothing of the raw image or not (bool 0/1)
     """
@@ -69,38 +64,11 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, 
             idxremove.append(idx)
     coordinates = np.delete(coordinates,idxremove,axis=0)
 
-    # remove peaks too close to each other
-    idxremove = []
-    for idx1, coordpair in enumerate(coordinates):
-        dists = [math.dist(coordpair, coordpair2) for idx2, coordpair2 in enumerate(coordinates) if idx2 != idx1]
-        dists_rem = np.array(dists) < peak_min_dist
-        if any(dists_rem):
-            idxremove.append(idx1)
-            idxremove_idx = [i for i, x in enumerate(dists_rem) if x]
-            for idx3 in idxremove_idx:
-                idxremove.append(idx3)
-    coordinates = np.delete(coordinates,idxremove,axis=0)   
-
-    # remove everyhting down to a certain length
-    if len(coordinates) > num_peaks:
-        coordinates = coordinates[:int(num_peaks),:]
-    
-    # roi size calculation
-    if not presetROIsize:
-        roi_sizes = []
-        cut_size = 50
-        for coords in coordinates:
-            img_cut = img[coords[0]-int(cut_size/2):coords[0]+int(cut_size/2), coords[1]-int(cut_size/2):coords[1]+int(cut_size/2)]
-            peak_val = img[coords[0],coords[1]]
-            img_cut_mask = img_cut > peak_val/roi_th_factor
-            labels_mask = measure.label(img_cut_mask)
-            regions = measure.regionprops(labels_mask)
-            regions.sort(key=lambda x: x.area, reverse=True)
-            if len(regions) > 1:
-                for region in regions[1:]:
-                    labels_mask[region.coords[:,0], region.coords[:,1]] = 0
-            roi_size = [np.max(np.where(labels_mask)[0]) - np.min(np.where(labels_mask)[0]) + roi_border, np.max(np.where(labels_mask)[1]) - np.min(np.where(labels_mask)[1]) + roi_border]
-            roi_sizes.append(roi_size)
+    # only keep coords inside provided thresholds, after sorting based on intensity
+    if len(coordinates) > coord_num_lim_hi:
+        coordinates = coordinates[int(coord_num_lim_lo):int(coord_num_lim_hi),:]
+    elif len(coordinates) > coord_num_lim_lo:
+        coordinates = coordinates[int(coord_num_lim_lo):,:]
 
     coordinates = np.flip(coordinates, axis=1)
 
