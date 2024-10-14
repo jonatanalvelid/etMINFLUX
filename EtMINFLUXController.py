@@ -13,6 +13,7 @@ from collections import deque
 from datetime import datetime
 from inspect import signature
 from qtpy import QtCore
+from pynput.keyboard import Key, Controller
 
 import tifffile as tiff
 import scipy.ndimage as ndi
@@ -51,6 +52,9 @@ class EtMINFLUXController(QtCore.QObject):
             self._imspector = ImspectorMock()
             print('Load mock Imspector connection')
 
+        # create an instance of keyboard emulator
+        self.keyboard = Controller()
+
         # folders for analysis pipelines and transformations
         self.analysisDir = os.path.join('analysis_pipelines')
         if not os.path.exists(self.analysisDir):
@@ -87,6 +91,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.presetROISizeCheck.clicked.connect(self.togglePresetROISize)
         self._widget.presetMfxRecTimeCheck.clicked.connect(self.togglePresetRecTime)
         self._widget.autoSaveCheck.clicked.connect(self.togglePresetAutoSave)
+        self._widget.autoDeleteMFXDatasetCheck.clicked.connect(self.togglePresetAutoDeleteMFX)
 
         self._widget.coordListWidget.delROIButton.clicked.connect(self.deleteROI)
         self._widget.followROIModeCheck.clicked.connect(self.toggleFollowingROI)
@@ -148,6 +153,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__lineWiseAnalysis = False
         self.__run_all_aoi = False  # run all detected events/area flag
         self.__autoSaveMeas = True
+        self.__autoDelMFX = True
         self.__followingROI = False
         self.__followingROIMode = ROIFollowMode.Single  # roi following mode currently selected
         self.__followingROIContinue = False
@@ -180,6 +186,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._sleepTime = float(self._widget.coordTransformWidget.time_sleep_edit.text())
         self._sleepTimeROISwitch = float(self._widget.coordTransformWidget.time_sleep_roiswitch_edit.text())
         self._mouse_drag_duration = float(self._widget.coordTransformWidget.drag_dur_edit.text())
+        self._saveTime = float(self._widget.coordTransformWidget.save_time_edit.text())
 
     def initiate(self):
         """ Initiate or stop an etMINFLUX experiment. """
@@ -376,10 +383,8 @@ class EtMINFLUXController(QtCore.QObject):
             self.continueFastModality()
             self.__fast_frame = 0
         elif self.__run_all_aoi:
-            time.sleep(self._sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
+            time.sleep(2*self._sleepTimeROISwitch)  # to make sure Imspector has properly turned off MINFLUX recording
             self.newROIMFX(self.__aoi_coords_deque.popleft(), roi_idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
-            time.sleep(self._sleepTimeROISwitch)  # ???
-            self.continueFastModality()
 
     def deleteROIGUI(self, idx):
         self._widget.coordListWidget.deleteCoord(idx)
@@ -498,7 +503,6 @@ class EtMINFLUXController(QtCore.QObject):
         self.launchHelpWidget()
         self.__binary_stack = []
         self.__binary_frame = 0
-        #self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0] - 7
         self.__confocalLinesAnalysisPeriod = self._imspector.active_measurement().stack(0).sizes()[0] - 7
         self.__confocalLineCurr = 0
         self._imspector.connect_end(self.imspectorLineEventBinaryMask, 1)
@@ -547,7 +551,7 @@ class EtMINFLUXController(QtCore.QObject):
             autolevels = False
         self._widget.analysisHelpWidget.img.setImage(img, autoLevels=autolevels)
         #infotext = f'Min: {np.min(img)}, max: {np.max(img/10000)} (rel. change)'
-        infotext = f'Min: {np.min(img)}, max: {np.max(img)}'
+        infotext = f'Min: {np.floor(np.min(img))}, max: {np.floor(np.max(img))}'
         self._widget.analysisHelpWidget.info_label.setText(infotext)
 
     def softReset(self):
@@ -801,36 +805,10 @@ class EtMINFLUXController(QtCore.QObject):
                 else:
                     roi_size = None
                 self._widget.initiateButton.setText('Next ROI')
-            ### TODO: TEST IF REMOVING THIS BREAKS ROIFOLLOWMODE SINGLE AND SINGLEREDECT, OR IF IT BREAKS PEAK-DETECTION-DEF OR PEAK-DET-RAND PIPELINES (SHOULD NOT AS PER ELIF BELOW)
-            #elif self.__followingROI and (self.__followingROIMode == ROIFollowMode.SingleRedetect or self.__followingROIMode == ROIFollowMode.Single) and self.__exinfo is not None and pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand':
-            #    # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
-            #    idx = int(self.__exinfo)
-            #    if idx < np.size(coords_detected):
-            #        if np.size(coords_detected) > np.max([2,idx]):
-            #            coords_scan = coords_detected[idx,:]
-            #        else:
-            #            coords_scan = coords_detected[0]
-            #        if not self.__presetROISize:
-            #            if np.size(coords_detected) > np.max([2,idx]):
-            #                roi_size = roi_sizes[idx]
-            #            else:
-            #                roi_size = roi_sizes[0]
-            #        else:
-            #            roi_size = None
-            #    else:
-            #        if np.size(coords_detected) > 2:
-            #            coords_scan = coords_detected[0,:]
-            #        else:
-            #            coords_scan = coords_detected[0]
-            #        if not self.__presetROISize:
-            #            roi_size = roi_sizes[0]
-            #        else:
-            #            roi_size = None
             elif self.__exinfo is not None and (pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand'):
-                self._widget.initiateButton.setText('Next ROI')  
                 # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = int(self.__exinfo)
-                if idx < np.size(coords_detected):
+                if idx < len(coords_detected):
                     if np.size(coords_detected) > np.max([2,idx]):
                         coords_scan = coords_detected[idx,:]
                     else:
@@ -842,15 +820,17 @@ class EtMINFLUXController(QtCore.QObject):
                             roi_size = roi_sizes[0]
                     else:
                         roi_size = None
-                else:
+                else:  # if defined coordinate is higher than the number of detected coords, take the last detected coord
                     if np.size(coords_detected) > 2:
-                        coords_scan = coords_detected[0,:]
+                        coords_scan = coords_detected[-1,:]
                     else:
                         coords_scan = coords_detected[0]
                     if not self.__presetROISize:
-                        roi_size = roi_sizes[0]
+                        roi_size = roi_sizes[-1]
                     else:
                         roi_size = None
+                if self._widget.endlessScanCheck.isChecked():
+                    self._widget.initiateButton.setText('Next ROI')
             else:
                 # take random detected coords (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = 0  # default value, if we do not have more
@@ -870,6 +850,8 @@ class EtMINFLUXController(QtCore.QObject):
                     roi_size = roi_sizes[idx]
                 else:
                     roi_size = None
+                if self._widget.endlessScanCheck.isChecked():
+                    self._widget.initiateButton.setText('Next ROI')
         else:
             coords_detected = np.array([])
             coords_scan = np.array([])
@@ -1146,6 +1128,14 @@ class EtMINFLUXController(QtCore.QObject):
         if time_left >= 0:
             self._widget.conf_guipausetimer_edit.setText(f'Time until confocal: {time_left:.0f} s')
 
+    def deleteMFXDataset(self, times=1):
+        mouse.move(*self.__coordTransformHelper._set_topmfxdataset_button_pos)
+        for _ in range(times):
+            time.sleep(self._sleepTime/3)
+            mouse.click()
+            self.keyboard.press(Key.delete)
+            self.keyboard.release(Key.delete)
+
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
         self._imspector.value_at('Minflux/sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
@@ -1239,6 +1229,9 @@ class EtMINFLUXController(QtCore.QObject):
         fileName = path_prefix + '_' + 'minflux' + '.msr'
         filePath = os.path.join(self._dataDir, fileName)
         meas.save_as(filePath)
+        if self.__autoDelMFX:
+            time.sleep(self._saveTime)
+            self.deleteMFXDataset(times=15)  # 10 is arbitrary, maybe find a way to set the number properly? Read the number of MFX datasets?
 
     def saveMeasurement(self):
         filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
@@ -1294,6 +1287,12 @@ class EtMINFLUXController(QtCore.QObject):
             self.__autoSaveMeas = False
         else:
             self.__autoSaveMeas = True
+
+    def togglePresetAutoDeleteMFX(self):
+        if not self._widget.autoDeleteMFXDatasetCheck.isChecked():
+            self.__autoDelMFX = False
+        else:
+            self.__autoDelMFX = True
 
     def toggleFollowingROI(self):
         if not self._widget.followROIModeCheck.isChecked():
@@ -1358,7 +1357,7 @@ class AnalysisImgHelper():
         self._widget.drawROIs()
 
     def updateNumberEventsDisp(self, numEvents):
-        self._widget.coordListWidget.numevents_edit.setText(f'Number of detected events: {numEvents}')
+        self.etMINFLUXController._widget.coordListWidget.numevents_edit.setText(f'Number of detected events: {numEvents}')
 
 
 class EtCoordTransformHelper():
@@ -1381,6 +1380,7 @@ class EtCoordTransformHelper():
         self._widget.conf_bottom_right_mon_button.clicked.connect(self.getConfocalBottomRightPixel)
         self._widget.setMFXROICalibrationButton.clicked.connect(self.setMFXROIButtonPosButtonCall)
         self._widget.setRepeatMeasCalibrationButton.clicked.connect(self.setRepeatMeasButtonPosButtonCall)
+        self._widget.setDeleteMFXDatasetButton.clicked.connect(self.setDeleteMFXDatasetButtonCall)
 
         self._widget.setCalibrationList(self.__saveFolder)
 
@@ -1393,6 +1393,8 @@ class EtCoordTransformHelper():
         self._widget.setRepeatMeasCalibrationButtonText(self._set_repeat_meas_button_pos)
         self._set_MFXROI_button_pos = [1555,72]
         self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
+        self._set_topmfxdataset_button_pos = [2191,1228]
+        self._widget.setDeleteMFXDatasetButtonText(self._set_topmfxdataset_button_pos)
 
         self.calibrationLoad()
 
@@ -1420,20 +1422,31 @@ class EtCoordTransformHelper():
         time.sleep(self.etMINFLUXController._sleepTime)
         self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
 
+    def setMFXROIButtonPos(self):
+        mouse_pos = mouse.get_position()
+        self._set_MFXROI_button_pos = np.array(mouse_pos)
+        mouse.unhook_all()
+
     def setRepeatMeasButtonPosButtonCall(self):
         mouse.on_click(self.setRepeatMeasButtonPos)
         mouse.wait(button='left')
         time.sleep(self.etMINFLUXController._sleepTime)
         self._widget.setRepeatMeasCalibrationButtonText(self._set_repeat_meas_button_pos)
 
-    def setMFXROIButtonPos(self):
-        mouse_pos = mouse.get_position()
-        self._set_MFXROI_button_pos = np.array(mouse_pos)
-        mouse.unhook_all()
-
     def setRepeatMeasButtonPos(self):
         mouse_pos = mouse.get_position()
         self._set_repeat_meas_button_pos = np.array(mouse_pos)
+        mouse.unhook_all()
+
+    def setDeleteMFXDatasetButtonCall(self):
+        mouse.on_click(self.setTopMFXDatasetPos)
+        mouse.wait(button='left')
+        time.sleep(self.etMINFLUXController._sleepTime)
+        self._widget.setDeleteMFXDatasetButtonText(self._set_topmfxdataset_button_pos)
+
+    def setTopMFXDatasetPos(self):
+        mouse_pos = mouse.get_position()
+        self._set_topmfxdataset_button_pos = np.array(mouse_pos)
         mouse.unhook_all()
 
     def getTransformCoeffs(self):

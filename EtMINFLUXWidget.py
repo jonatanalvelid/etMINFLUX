@@ -71,6 +71,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # create check box for automatic saving
         self.autoSaveCheck = QtWidgets.QCheckBox('Auto-save .msr after event')
         self.autoSaveCheck.setChecked(True)
+        self.autoDeleteMFXDatasetCheck = QtWidgets.QCheckBox('Auto-delete mfx data after save')
+        self.autoDeleteMFXDatasetCheck.setChecked(True)
         # create check box for plotting ROI even in experiment mode
         self.plotROICheck = QtWidgets.QCheckBox('Plot ROI (experiment mode)')
         # create check box for confocal monitoring pausing between frames
@@ -263,8 +265,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 3)
         self.grid.addWidget(self.autoSaveCheck, currentRow, 4)
         currentRow += 1
-        currentRow += 1
         self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
@@ -480,6 +482,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.loadCalibButton = QtWidgets.QPushButton('Load calibration')
         self.setMFXROICalibrationButton = QtWidgets.QPushButton('Set MFX ROI calib.')
         self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Rep. meas. calib.')
+        self.setDeleteMFXDatasetButton = QtWidgets.QPushButton('Top MFX dataset')
         self.setSaveDirButton = QtWidgets.QPushButton('Choose save directory')
         self.save_dir_edit = QtWidgets.QLineEdit('Default data folder')
         self.save_dir_edit.setEnabled(False)
@@ -518,6 +521,9 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.drag_dur_label = QtWidgets.QLabel('Drag duration (s)')
         self.drag_dur_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.drag_dur_edit = QtWidgets.QLineEdit(str(0.15))
+        self.save_time_label = QtWidgets.QLabel('Save time (s)')
+        self.save_time_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.save_time_edit = QtWidgets.QLineEdit(str(3))
 
         # Create titles
         self.gui_calibration_title = QtWidgets.QLabel('GUI calibration')
@@ -563,6 +569,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 0)
         self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 1)
+        self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 2)
         currentRow += 1
         self.grid.addWidget(self.timing_title, currentRow, 1)
         currentRow += 1
@@ -574,6 +581,9 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.drag_dur_label, currentRow, 0)
         self.grid.addWidget(self.drag_dur_edit, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.save_time_label, currentRow, 0)
+        self.grid.addWidget(self.save_time_edit, currentRow, 1)
         currentRow += 1
         self.grid.addWidget(self.setSaveDirButton, currentRow, 0)
         self.grid.addWidget(self.save_dir_edit, currentRow, 1, 1, 2)
@@ -598,6 +608,9 @@ class CoordTransformWidget(QtWidgets.QWidget):
 
     def setMFXROICalibrationButtonText(self, coords):
         self.setMFXROICalibrationButton.setText(f'Set MFX ROI calib.: [{coords[0]},{coords[1]}]')
+
+    def setDeleteMFXDatasetButtonText(self, coords):
+        self.setDeleteMFXDatasetButton.setText(f'Top MFX dataset: [{coords[0]},{coords[1]}]')
 
     def getSaveFolder(self):
         return askdirectory(title='Select folder...')
