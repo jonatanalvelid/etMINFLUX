@@ -38,10 +38,10 @@ class EtMINFLUXController(QtCore.QObject):
         print('Initializing etMINFLUX controller')
 
         # set default data dir
-        self._dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
-        #self._dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
-        self._transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
-        #self._transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
+        #self._dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
+        self._dataDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'data')
+        #self._transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+        self._transformsDir = os.path.join('C:\\Users\\alvelidjonatan\\Documents\\Data\\etMINFLUX', 'recordings', 'transforms')
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
 
         # open imspector connection
@@ -329,12 +329,20 @@ class EtMINFLUXController(QtCore.QObject):
         meas = self._imspector.active_measurement()
         cfg = meas.configuration(self.__conf_config)
         meas.activate(cfg)
-        # set repeat measurement - start scan
+        # set repeat measurement (Ctrl+Shift+Alt+R shortcut in Imspector)
         time.sleep(self._sleepTime)
-        mouse.move(*self.__coordTransformHelper._set_repeat_meas_button_pos)
-        mouse.click()
-        # run a single frame - start scan
-        #self._imspector.start()
+        self.keyboard.press(Key.ctrl)
+        self.keyboard.press(Key.shift)
+        self.keyboard.press(Key.alt)
+        self.keyboard.press('r')
+        self.keyboard.release('r')
+        self.keyboard.release(Key.alt)
+        self.keyboard.release(Key.shift)
+        self.keyboard.release(Key.ctrl)
+        #mouse.move(*self.__coordTransformHelper._set_repeat_meas_button_pos)
+        #mouse.click()
+        # start scan
+        self._imspector.start()
 
     def scanEnded(self):
         """ End a MINFLUX acquisition. """
@@ -556,6 +564,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def softReset(self):
         """ Reset all parameters after a soft lock. """
+        ## TODO: Expand this and reset all parameters like confocal deques etc.
         self.setBusyFalse()
         self.resetHelpWidget()
         self.resetRunParams()
@@ -1177,7 +1186,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
         
     def setMFXROI(self, position, ROI_size):
-        """ Set the MINFLUX ROI by mouse control: drag ROI, and click "Set as MFX ROI"-button"""
+        """ Set the MINFLUX ROI by mouse control: drag ROI, and click "Set as MFX ROI"-button. Change button-click with mouse to shortcut click with keyboard emulation. """
         # get monitor px position
         shift = 1
         if self.__presetROISize:
@@ -1200,9 +1209,18 @@ class EtMINFLUXController(QtCore.QObject):
         mouse.click()
         # drag actual ROI
         mouse.drag(*positions, absolute=True, duration=self._mouse_drag_duration)
-        mouse.move(*self.__coordTransformHelper._set_MFXROI_button_pos)
-        time.sleep(self._sleepTime)
-        mouse.click()
+        # keyboard shortcut clicks to set as MFX ROI
+        self.keyboard.press(Key.ctrl)
+        self.keyboard.press(Key.shift)
+        self.keyboard.press(Key.alt)
+        self.keyboard.press('m')
+        self.keyboard.release('m')
+        self.keyboard.release(Key.alt)
+        self.keyboard.release(Key.shift)
+        self.keyboard.release(Key.ctrl)
+        #mouse.move(*self.__coordTransformHelper._set_MFXROI_button_pos)
+        #time.sleep(self._sleepTime)
+        #mouse.click()
 
     def startMFX(self):
         """ Run event-triggered MINFLUX acquisition in small ROI. """
@@ -1250,36 +1268,28 @@ class EtMINFLUXController(QtCore.QObject):
 
     def togglePresetROISize(self):
         if not self._widget.presetROISizeCheck.isChecked():
-            self._widget.size_x_edit.setReadOnly(True)
-            self._widget.size_y_edit.setReadOnly(True)
-            self._widget.size_x_edit.setStyleSheet("color: gray;")
-            self._widget.size_y_edit.setStyleSheet("color: gray;")
+            self._widget.size_x_edit.setEditable(False)
+            self._widget.size_y_edit.setEditable(False)
             self.__presetROISize = False
         else:
-            self._widget.size_x_edit.setReadOnly(False)
-            self._widget.size_y_edit.setReadOnly(False)
-            self._widget.size_x_edit.setStyleSheet("color: black;")
-            self._widget.size_y_edit.setStyleSheet("color: black;")
+            self._widget.size_x_edit.setEditable(True)
+            self._widget.size_y_edit.setEditable(True)
             self.__presetROISize = True
 
     def toggleConfocalFramePause(self):
         if not self._widget.confocalFramePauseCheck.isChecked():
-            self._widget.conf_frame_pause_edit.setReadOnly(True)
-            self._widget.conf_frame_pause_edit.setStyleSheet("color: gray;")
+            self._widget.conf_frame_pause_edit.setEditable(False)
             self.__confocalFramePause = False
         else:
-            self._widget.conf_frame_pause_edit.setReadOnly(False)
-            self._widget.conf_frame_pause_edit.setStyleSheet("color: black;")
+            self._widget.conf_frame_pause_edit.setEditable(True)
             self.__confocalFramePause = True
 
     def togglePresetRecTime(self):
         if not self._widget.presetMfxRecTimeCheck.isChecked():
-            self._widget.mfx_rectime_edit.setReadOnly(True)
-            self._widget.mfx_rectime_edit.setStyleSheet("color: gray;")
+            self._widget.mfx_rectime_edit.setEditable(False)
             self.__presetRecTime = False
         else:
-            self._widget.mfx_rectime_edit.setReadOnly(False)
-            self._widget.mfx_rectime_edit.setStyleSheet("color: black;")
+            self._widget.mfx_rectime_edit.setEditable(True)
             self.__presetRecTime = True
 
     def togglePresetAutoSave(self):
@@ -1297,13 +1307,11 @@ class EtMINFLUXController(QtCore.QObject):
     def toggleFollowingROI(self):
         if not self._widget.followROIModeCheck.isChecked():
             if self.__presetRecTime:
-                self._widget.mfx_rectime_edit.setReadOnly(False)
-                self._widget.mfx_rectime_edit.setStyleSheet("color: black;")
+                self._widget.mfx_rectime_edit.setEditable(True)
             self._widget.presetMfxRecTimeCheck.setEnabled(True)
             self.__followingROI = False
         else:
-            self._widget.mfx_rectime_edit.setReadOnly(True)
-            self._widget.mfx_rectime_edit.setStyleSheet("color: gray;")
+            self._widget.mfx_rectime_edit.setEditable(False)
             self._widget.presetMfxRecTimeCheck.setEnabled(False)
             self.__followingROI = True
 
@@ -1378,8 +1386,8 @@ class EtCoordTransformHelper():
         self._widget.loadCalibButton.clicked.connect(self.calibrationLoad)
         self._widget.conf_top_left_mon_button.clicked.connect(self.getConfocalTopLeftPixel)
         self._widget.conf_bottom_right_mon_button.clicked.connect(self.getConfocalBottomRightPixel)
-        self._widget.setMFXROICalibrationButton.clicked.connect(self.setMFXROIButtonPosButtonCall)
-        self._widget.setRepeatMeasCalibrationButton.clicked.connect(self.setRepeatMeasButtonPosButtonCall)
+        #self._widget.setMFXROICalibrationButton.clicked.connect(self.setMFXROIButtonPosButtonCall)
+        #self._widget.setRepeatMeasCalibrationButton.clicked.connect(self.setRepeatMeasButtonPosButtonCall)
         self._widget.setDeleteMFXDatasetButton.clicked.connect(self.setDeleteMFXDatasetButtonCall)
 
         self._widget.setCalibrationList(self.__saveFolder)
@@ -1389,10 +1397,10 @@ class EtCoordTransformHelper():
         #self._set_repeat_meas_button_pos = [407,65]
         #self._set_MFXROI_button_pos = [652,65]
         # lab default
-        self._set_repeat_meas_button_pos = [1328,72]
-        self._widget.setRepeatMeasCalibrationButtonText(self._set_repeat_meas_button_pos)
-        self._set_MFXROI_button_pos = [1555,72]
-        self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
+        #self._set_repeat_meas_button_pos = [1328,72]
+        #self._widget.setRepeatMeasCalibrationButtonText(self._set_repeat_meas_button_pos)
+        #self._set_MFXROI_button_pos = [1555,72]
+        #self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
         self._set_topmfxdataset_button_pos = [2191,1228]
         self._widget.setDeleteMFXDatasetButtonText(self._set_topmfxdataset_button_pos)
 
@@ -1416,16 +1424,16 @@ class EtCoordTransformHelper():
     def getConfocalBottomRightPixel(self):
         mouse.on_click(self.getCurrentMouseCoordsBottomRight)
 
-    def setMFXROIButtonPosButtonCall(self):
-        mouse.on_click(self.setMFXROIButtonPos)
-        mouse.wait(button='left')
-        time.sleep(self.etMINFLUXController._sleepTime)
-        self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
+    #def setMFXROIButtonPosButtonCall(self):
+    #    mouse.on_click(self.setMFXROIButtonPos)
+    #    mouse.wait(button='left')
+    #    time.sleep(self.etMINFLUXController._sleepTime)
+    #    self._widget.setMFXROICalibrationButtonText(self._set_MFXROI_button_pos)
 
-    def setMFXROIButtonPos(self):
-        mouse_pos = mouse.get_position()
-        self._set_MFXROI_button_pos = np.array(mouse_pos)
-        mouse.unhook_all()
+    #def setMFXROIButtonPos(self):
+    #    mouse_pos = mouse.get_position()
+    #    self._set_MFXROI_button_pos = np.array(mouse_pos)
+    #    mouse.unhook_all()
 
     def setRepeatMeasButtonPosButtonCall(self):
         mouse.on_click(self.setRepeatMeasButtonPos)
