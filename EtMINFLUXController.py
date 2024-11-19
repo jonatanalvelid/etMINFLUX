@@ -9,6 +9,7 @@ import math
 import specpy
 import mouse
 import threading
+import copy
 from collections import deque
 from datetime import datetime
 from inspect import signature
@@ -232,11 +233,13 @@ class EtMINFLUXController(QtCore.QObject):
             self.resetEventViewWidget()
             if self.__runMode == RunMode.Experiment:
                 self.launchEventViewWidget()
+            # ensure activate configuration is conf overview
+            self.activateConfocalConfig()
             # load selected coordinate transform
             self.loadTransform()
-            self.__transformCoeffs = self.__coordTransformHelper.getTransformCoeffs()
+            self.getTransformCoefficients()
             # read param for line-wise analysis pipeline runs and decide analysis period
-            self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0] - 7
+            #self.__confocalLinesFrame = self._imspector.active_measurement().stack(0).sizes()[0] - 7
             self.__lineWiseAnalysis = self._widget.lineWiseAnalysisCheck.isChecked()
             if self.__lineWiseAnalysis:
                 self.__confocalLinesAnalysisPeriod = int(self._widget.lines_analysis_edit.text())
@@ -332,9 +335,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__confocalLineFrameCurr = 0
         self.__confocalLineCurr = 0
         # ensure activate configuration is conf overview
-        meas = self._imspector.active_measurement()
-        cfg = meas.configuration(self.__conf_config)
-        meas.activate(cfg)
+        self.activateConfocalConfig()
         time.sleep(self._sleepTime)
         # move mouse and click to start repeat measurement
         mouse.move(*self.__coordTransformHelper._set_repeat_meas_button_pos)
@@ -511,6 +512,14 @@ class EtMINFLUXController(QtCore.QObject):
         """ Load a previously saved coordinate transform. """
         transformname = self.getTransformName()
         self.transform = getattr(importlib.import_module(f'{transformname}'), f'{transformname}')
+
+    def getTransformCoefficients(self):
+        """ Get transform coefficients from GUI calibration and from reading Imspector values for the scan FOV. """
+        transformCoeffs_gui = self.__coordTransformHelper.getTransformCoeffsGui()
+        transformCoeffs_confFOV = self.getConfocalSize()
+        transformCoeffs = copy.deepcopy(transformCoeffs_gui)
+        transformCoeffs.extend(transformCoeffs_confFOV)
+        self.__transformCoeffs = transformCoeffs
 
     def loadPipeline(self):
         """ Load the selected analysis pipeline, and its parameters into the GUI. """
@@ -965,8 +974,8 @@ class EtMINFLUXController(QtCore.QObject):
             roi_size_um_scan = roi_size_scan
         # or calculate roi size in um from in confocal image pixels
         else:
-            coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2],self.__transformCoeffs)
-            coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2],self.__transformCoeffs)
+            coord_top, coord_um_top, _ = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2], self.__transformCoeffs)
+            coord_bot, coord_um_bot, _ = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2], self.__transformCoeffs)
             roi_size_scan = np.subtract(coord_top, coord_bot)
             roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
         # get preset recording time, if set
@@ -1023,12 +1032,17 @@ class EtMINFLUXController(QtCore.QObject):
                     print('roi sizes empty - preset size')
             self._widget.analysisHelpWidget.removeROI(roi_idx)
 
+    def activateConfocalConfig(self):
+        meas = self._imspector.active_measurement()
+        cfg = meas.configuration(self.__conf_config)
+        meas.activate(cfg)
+
     def setEventsImage(self, coords):
         """ Create an image with pixel-marked events in the imspector measurement. """
         time.sleep(self._sleepTime*3)
         meas = self._imspector.active_measurement()
         # activate confocal configuration
-        meas.activate(meas.configuration('ov conf'))
+        self.activateConfocalConfig()
         # create new data stack with same size as confocal
         meas.create_stack(int, np.roll(np.shape(meas.stack(0).data()),2))
         # get data stack of newly created stack
@@ -1052,9 +1066,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def newROIMFX(self, coords_scan, roi_idx):
         # switch active Imspector window to conf overview
-        meas = self._imspector.active_measurement()
-        cfg = meas.configuration(self.__conf_config)
-        meas.activate(cfg)
+        self.activateConfocalConfig()
         # transform detected coordinate between from pixels to sample position in um
         coords_center_scan, coords_center_um, self.__px_size_mon = self.transform(coords_scan, self.__transformCoeffs) 
         if self.__presetROISize:
@@ -1187,6 +1199,14 @@ class EtMINFLUXController(QtCore.QObject):
             self.keyboard.press(Key.delete)
             self.keyboard.release(Key.delete)
 
+    def getConfocalSize(self):
+        x_roisize = self._imspector.value_at('ExpControl/scan/range/x/len', specpy.ValueTree.Measurement).get()*1e6
+        x_pixels = self._imspector.value_at('ExpControl/scan/range/x/res', specpy.ValueTree.Measurement).get()
+        y_roisize = self._imspector.value_at('ExpControl/scan/range/y/len', specpy.ValueTree.Measurement).get()*1e6
+        y_pixels = self._imspector.value_at('ExpControl/scan/range/y/res', specpy.ValueTree.Measurement).get()
+        self.__confocalLinesFrame = y_pixels - 5
+        return [x_roisize, y_roisize, x_pixels, y_pixels]
+
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
         self._imspector.value_at('Minflux/sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
@@ -1232,10 +1252,10 @@ class EtMINFLUXController(QtCore.QObject):
         # get monitor px position
         shift = 1
         if self.__presetROISize:
-            positions = (position[0] - ROI_size[0]/self.__px_size_mon/2 + shift,
-                        position[1] - ROI_size[1]/self.__px_size_mon/2 + shift,
-                        position[0] + ROI_size[0]/self.__px_size_mon/2 + shift,
-                        position[1] + ROI_size[1]/self.__px_size_mon/2 + shift)
+            positions = (position[0] - ROI_size[0]/self.__px_size_mon[0]/2 + shift,
+                        position[1] - ROI_size[1]/self.__px_size_mon[1]/2 + shift,
+                        position[0] + ROI_size[0]/self.__px_size_mon[0]/2 + shift,
+                        position[1] + ROI_size[1]/self.__px_size_mon[1]/2 + shift)
         else:
             positions = (position[0] - ROI_size[0]/2 + shift,
                         position[1] - ROI_size[1]/2 + shift,
@@ -1244,7 +1264,7 @@ class EtMINFLUXController(QtCore.QObject):
         # click two positions to remove any currently drawn ROIs
         border_margin = 5
         mock_pos1 = [self.__transformCoeffs[0]+border_margin, self.__transformCoeffs[1]+border_margin]  # top left
-        mock_pos2 = [mock_pos1[0]+self.__transformCoeffs[2]-border_margin*2, mock_pos1[1]+self.__transformCoeffs[2]-border_margin*2]  # bottom right
+        mock_pos2 = [mock_pos1[0]+self.__transformCoeffs[2]-border_margin*2, mock_pos1[1]+self.__transformCoeffs[3]-border_margin*2]  # bottom right
         mouse.move(*mock_pos1)
         mouse.click()
         mouse.move(*mock_pos2)
@@ -1458,7 +1478,7 @@ class EtCoordTransformHelper():
         self.__saveFolder = saveFolder
 
         # initiate coordinate transform parameters
-        self.__transformCoeffs = [0,0,0,0,0]
+        self.__transformCoeffs_gui = [0,0,0,0]
         self.__calibNameSuffix = '_transformParams.txt'
 
         # connect signals from widget
@@ -1498,8 +1518,10 @@ class EtCoordTransformHelper():
 
     def getCurrentMouseCoordsBottomRight(self):
         confBottomRightPosition = mouse.get_position()
-        conf_size_px_mon = int(np.mean([np.abs(confBottomRightPosition[0]-self._confTopLeftPosition[0]), np.abs(confBottomRightPosition[1]-self._confTopLeftPosition[1])]))
-        self._widget.conf_size_px_mon_edit.setText(str(conf_size_px_mon))
+        conf_size_x_px_mon = int(np.abs(confBottomRightPosition[0]-self._confTopLeftPosition[0]))
+        conf_size_y_px_mon = int(np.abs(confBottomRightPosition[1]-self._confTopLeftPosition[1]))
+        self._widget.conf_size_x_px_mon_edit.setText(str(conf_size_x_px_mon))
+        self._widget.conf_size_y_px_mon_edit.setText(str(conf_size_y_px_mon))
         mouse.unhook_all()
 
     def getConfocalBottomRightPixel(self):
@@ -1538,9 +1560,9 @@ class EtCoordTransformHelper():
         self._set_topmfxdataset_button_pos = np.array(mouse_pos)
         mouse.unhook_all()
 
-    def getTransformCoeffs(self):
+    def getTransformCoeffsGui(self):
         """ Get transformation coefficients. """
-        return self.__transformCoeffs
+        return self.__transformCoeffs_gui
 
     def calibrationLaunch(self):
         """ Launch calibration. """
@@ -1549,15 +1571,14 @@ class EtCoordTransformHelper():
     def calibrationFinish(self):
         """ Finish calibration. """
         # get coordinate transform parameter values from transform widget
-        self.__transformCoeffs[0] = int(self._widget.conf_top_x_mon_edit.text())
-        self.__transformCoeffs[1] = int(self._widget.conf_top_y_mon_edit.text())
-        self.__transformCoeffs[2] = int(self._widget.conf_size_px_mon_edit.text())
-        self.__transformCoeffs[3] = float(self._widget.conf_size_um_edit.text())
-        self.__transformCoeffs[4] = int(self._widget.conf_size_px_edit.text())
+        self.__transformCoeffs_gui[0] = int(self._widget.conf_top_x_mon_edit.text())
+        self.__transformCoeffs_gui[1] = int(self._widget.conf_top_y_mon_edit.text())
+        self.__transformCoeffs_gui[2] = int(self._widget.conf_size_x_px_mon_edit.text())
+        self.__transformCoeffs_gui[3] = int(self._widget.conf_size_y_px_mon_edit.text())
         # save coordinate transform parameters
         name = datetime.now().strftime('%y%m%d-%Hh%Mm')
         filename = os.path.join(self.__saveFolder, name) + self.__calibNameSuffix
-        np.savetxt(fname=filename, X=self.__transformCoeffs)
+        np.savetxt(fname=filename, X=self.__transformCoeffs_gui)
         # reset confocal image deques, in case confocal image size changed
         self.etMINFLUXController.clearConfocalData()
 
@@ -1569,14 +1590,12 @@ class EtCoordTransformHelper():
         params = np.loadtxt(fname=filename, dtype=float, delimiter='\t')
         self._widget.conf_top_x_mon_edit.setText(str(int(params[0])))
         self._widget.conf_top_y_mon_edit.setText(str(int(params[1])))
-        self._widget.conf_size_px_mon_edit.setText(str(int(params[2])))
-        self._widget.conf_size_um_edit.setText(str(params[3]))
-        self._widget.conf_size_px_edit.setText(str(int(params[4])))
-        self.__transformCoeffs[0] = int(params[0])
-        self.__transformCoeffs[1] = int(params[1])
-        self.__transformCoeffs[2] = int(params[2])
-        self.__transformCoeffs[3] = float(params[3])
-        self.__transformCoeffs[4] = int(params[4])
+        self._widget.conf_size_x_px_mon_edit.setText(str(int(params[2])))
+        self._widget.conf_size_y_px_mon_edit.setText(str(int(params[3])))
+        self.__transformCoeffs_gui[0] = int(params[0])
+        self.__transformCoeffs_gui[1] = int(params[1])
+        self.__transformCoeffs_gui[2] = int(params[2])
+        self.__transformCoeffs_gui[3] = int(params[3])
 
 
 class RunMode(enum.Enum):
