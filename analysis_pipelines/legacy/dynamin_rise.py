@@ -13,9 +13,14 @@ def eucl_dist(a,b):
     return np.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2)
 
 def dynamin_rise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                     min_dist=2, num_peaks=100, thresh_abs_lo=2, thresh_abs_hi=300, border_limit=10,
-                     smoothing_radius=0.4, memory_frames=7, track_search_dist=5, frames_appear=3,
-                     thresh_stayratio=0.4, thresh_intincratio=1.4, thresh_move_dist=30):
+                     min_dist=2, num_peaks=150, thresh_abs_lo=2, thresh_abs_hi=15, border_limit=15,
+                     smoothing_radius=1.0, memory_frames=1, track_search_dist=2, frames_appear=6,
+                     thresh_stayratio=0.8, thresh_intincratio=2.0, thresh_move_dist=20):
+    
+    """ Old standard:
+    min_dist=2, num_peaks=100, thresh_abs_lo=3, thresh_abs_hi=15, border_limit=15,
+                     smoothing_radius=0.7, memory_frames=3, track_search_dist=4, frames_appear=6,
+                     thresh_stayratio=0.8, thresh_intincratio=2.0, thresh_move_dist=20)"""
     """
     Common parameters:
     img - current image,
@@ -46,7 +51,7 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROI
     dog_lo = 0.05
     dog_hi = 3
     intensity_sum_rad = 3
-    meanlen = 3
+    meanlen = np.max([2,int(np.floor(frames_appear/2))])
     track_len = 2 * frames_appear + 1  # number of last frames to keep in the tracking (more frames = slower track linking)
     track_search_dist = int(track_search_dist)
     thresh_stayframes = int(thresh_stayratio*frames_appear)
@@ -117,7 +122,7 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROI
     if len(exinfo) > 0:
         timepoint = max(exinfo['t'])+1
     else:
-        timepoint = 0
+        timepoint = frames_appear+1
     if len(coordinates)>0:
         coords_df = pd.DataFrame(np.hstack((np.array(range(len(coordinates))).reshape(-1,1),timepoint*np.ones(len(coordinates)).reshape(-1,1),coordinates,np.array(intensities).reshape(-1,1))),columns=['particle','t','x','y','intensity'])
         tracks_all = pd.concat([exinfo, coords_df])
@@ -142,7 +147,7 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROI
         if timepoint >= 2*frames_appear:
             tracks_timepoint = tracks_all[tracks_all['t']==timepoint-frames_appear]
             tracks_before = tracks_all[tracks_all['t']<timepoint-frames_appear]
-            tracks_after = tracks_all[tracks_all['t']>timepoint-frames_appear]
+            tracks_after = tracks_all[tracks_all['t']>timepoint-frames_appear-1]
             #particle_ids_after = np.unique(tracks_after['particle'])
             particle_ids_before = np.unique(tracks_before['particle'])
             for _,track in tracks_timepoint.iterrows():
@@ -152,32 +157,35 @@ def dynamin_rise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROI
                     # check that it stays for at least thresh_stayframes frames
                     track_self_after = tracks_after[tracks_after['particle']==particle_id]
                     if len(track_self_after) > thresh_stayframes:
-                        # check that intensity of spot increases over the thresh_stay frames with at least thresh_intincratio
+                        print('check 3 reached')
+                        # check that intensity of spot increases over the thresh_stay frames with at least thresh_intincratio, in one of the three ratios
+                        # and that it increases in all three ratios
                         track_self = track_self_after.tail(1)
                         prev_frames = np.array(prev_frames)
-                        track_intensity_before = np.sum(np.sum(prev_frames[:, int(track_self['x'])-intensity_sum_rad:int(track_self['x'])+intensity_sum_rad+1,
+                        #print([int(track_self['x'])-intensity_sum_rad, int(track_self['x'])+intensity_sum_rad+1, int(track_self['y'])-intensity_sum_rad, int(track_self['y'])+intensity_sum_rad+1])
+                        track_intensity_before = np.sum(np.sum(prev_frames[:int(-frames_appear), int(track_self['x'])-intensity_sum_rad:int(track_self['x'])+intensity_sum_rad+1,
                                                                    int(track_self['y'])-intensity_sum_rad:int(track_self['y'])+intensity_sum_rad+1],
                                                                axis=1),axis=1)/(2*intensity_sum_rad+1)**2
-                        track_intensity_after = track_self_after['intensity']
+                        track_intensity_after = track_self_after['intensity'].to_numpy()
                         int_before = np.mean(track_intensity_before[0:meanlen])
-                        int_init = np.mean(track_intensity_after.iloc[0:meanlen])
-                        int_last = np.mean(track_intensity_after.iloc[-(meanlen+1):-1])
+                        int_init = np.mean(track_intensity_after[0:meanlen])
+                        int_last = np.mean(track_intensity_after[-(meanlen+1):-1])
                         intincratio_before = int_init/int_before
                         intincratio = int_last/int_init
                         intincrratio_tot = int_last/int_before
                         if intincratio_before > thresh_intincratio or intincratio > thresh_intincratio or intincrratio_tot > thresh_intincratio:
-                            # check that track has not moved too much since it appeared
-                            track_self_after_start = track_self_after.head(1)
-                            track_self_after_end = track_self_after.tail(1)
-                            d_start_end = eucl_dist((int(track_self_after_start['x']),int(track_self_after_start['y'])),(int(track_self_after_end['x']),int(track_self_after_end['y'])))
-                            if d_start_end < thresh_move_dist:
-                                # if all conditions are true: potential appearence event frames_appear ago, save coord of curr position
-                                print([intincratio_before, intincratio, intincrratio_tot])
-                                print([track_intensity_before, track_intensity_after])
-                                coords_event = np.array([[int(track_self['x']), int(track_self['y'])]])
-                                break
-                
+                            if intincratio_before > 1 and intincratio > 1 and intincrratio_tot > 1:
+                                print('check 4 reached')
+                                # check that track has not moved too much since it appeared
+                                track_self_after_start = track_self_after.head(1)
+                                track_self_after_end = track_self_after.tail(1)
+                                d_start_end = eucl_dist((int(track_self_after_start['x']),int(track_self_after_start['y'])),(int(track_self_after_end['x']),int(track_self_after_end['y'])))
+                                if d_start_end < thresh_move_dist:
+                                    print('check 5 reached')
+                                    # if all conditions are true: potential appearence event frames_appear ago, save coord of curr position
+                                    coords_event = np.array([[int(track_self['x']), int(track_self['y'])]])
+                                    break
+
     coords_event = np.flip(coords_event, axis=1)  # seems to be needed in this pipeline
-    print('pipeline finished')
 
     return coords_event, roi_sizes, tracks_all, img_ana

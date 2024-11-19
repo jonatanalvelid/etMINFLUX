@@ -1,6 +1,9 @@
 import os
 
 import pyqtgraph as pg
+import numpy as np
+import matplotlib.figure as mplfig
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QPoint
 
@@ -17,9 +20,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         super().__init__(*args, **kwargs)
 
         print('Initializing etMINFLUX widget')
-        
+
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
+        self.setWindowTitle('etMINFLUX')
 
         # generate dropdown list for analysis pipelines
         self.analysisPipelines = list()
@@ -55,7 +59,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # creat button for unlocking any softlock happening
         self.softResetButton = PushButton('Soft reset')
         # create check box for endless running mode
-        self.endlessScanCheck = CheckBox('Endless')
+        self.endlessScanCheck = CheckBox('Endless') 
         # create check box for scan all detected ROIs
         self.triggerAllROIsCheck = CheckBox('Trigger all ROIs')
         # create check box for pre-setting ROI size
@@ -141,6 +145,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # help widget for showing coords list
         self.coordListWidget = CoordListWidget(*args, **kwargs)
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
+        # help widget for event viewing
+        self.eventViewWidget = EventWidget()
 
         # create grid and grid layout
         self.grid = QtWidgets.QGridLayout()
@@ -248,6 +254,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.coordListWidget = CoordListWidget()
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
 
+    def resetEventViewWidget(self):
+        self.eventViewWidget = EventWidget()
+
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
         # remove previous parameter fields for the previously loaded pipeline
@@ -311,7 +320,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
     def launchHelpWidget(self, widget, init=True):
         """ Launch the help widget. """
-        if init:
+        if widget == self.eventViewWidget:
+            self.eventViewWidget.showwidget(init)
+        elif init:
             widget.show()
         else:
             widget.hide()
@@ -403,6 +414,197 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.grid.addWidget(widget, 1, 7, 1, 1)
 
 
+class EventWidget(QtWidgets.QWidget):
+    """ Pop-up widget for the live view on a detected event, with confocal image stack viewing as well as a plot over intensity. """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # set graphic style of widget
+        self.setStyleSheet('background-color: rgb(70,70,70);')
+        self.setWindowTitle("Event view")
+        
+        # Create image viewer and intensity graph widgets
+        self.image_viewer = StackViewerWidget(self)
+        self.intensity_graph = IntensityGraphWidget(self)
+        
+        # Create a grid layout and add widgets
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        self.grid.addWidget(self.image_viewer, 0, 0)
+        self.grid.addWidget(self.intensity_graph, 0, 1)
+
+        frame_gm = self.frameGeometry()
+        topLeftPoint = QPoint(0,970)
+        frame_gm.moveTopLeft(topLeftPoint)
+        self.move(frame_gm.topLeft())
+        
+    def add_frame_and_intensity(self, image, intensity):
+        # Add frame to image viewer and update intensity trace
+        self.image_viewer.add_frame(image)
+        # Update intensity graph with the full trace
+        self.intensity_graph.update_plot_postevent(intensity)
+
+    def add_event(self, image_stack, intensity_trace):
+        self.image_viewer.add_frames_event(image_stack)
+        self.intensity_graph.update_plot_event(intensity_trace)
+
+    def reset(self):
+        self.image_viewer.reset()
+        self.intensity_graph.reset()
+
+    def showwidget(self, init):
+        if init:
+            self.show()
+        else:
+            self.hide()
+
+
+class IntensityGraphWidget(QtWidgets.QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # set graphic style of widget
+        self.setStyleSheet('background-color: rgb(70,70,70);')
+
+        # Setup matplotlib figure
+        self.figure = mplfig.Figure()
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111)
+
+        # set layout and add figure
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        self.grid.addWidget(self.canvas)
+
+        self.reset()
+        
+    def update_plot(self):
+        self.ax.clear()
+        # plot vertical lines for event
+        self.ax.axvline(x=self.event_frame, linewidth=4, color='g', alpha=0.6)
+        #self.ax.axvline(x=self.event_frame-frappe, linewidth=4, color='r', alpha=0.6)
+        #self.ax.axvline(x=self.event_frame-2*frappe, linewidth=4, color='b', alpha=0.6)
+        self.ax.plot(self.intensity_trace, 'r-')
+        self.ax.set_title("Event area intensity")
+        self.ax.set_xlabel("Frame")
+        self.ax.set_ylabel("Intensity")
+        self.canvas.draw()
+
+    def update_plot_event(self, intensity_trace):
+        if len(intensity_trace) == 1:
+            self.event_frame = 0
+        else:
+            self.event_frame = len(intensity_trace)
+        self.intensity_trace = intensity_trace
+        self.update_plot()
+
+    def update_plot_postevent(self, intensity_trace):
+        self.intensity_trace = intensity_trace
+        self.update_plot()
+
+    def reset(self):
+        self.event_frame = None
+        self.intensity_trace = []
+
+
+class StackViewerWidget(QtWidgets.QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # set graphic style of widget
+        self.setStyleSheet('background-color: rgb(70,70,70);')
+
+        self.stack = []
+        self.current_frame = 0
+        self.auto_playing = False
+        
+        # Slider
+        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.valueChanged.connect(self.change_frame)
+        
+        # Auto play button
+        self.auto_play_button = PushButton("Auto play")
+        self.auto_play_button.setCheckable(True)
+        self.auto_play_button.clicked.connect(self.toggle_auto_play)
+
+        # Timer for auto-play
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.next_frame)
+
+        # Image viewbox and image
+        self.imgVbWidget = pg.GraphicsLayoutWidget()
+        self.imgVb = pg.PlotItem(axisItems={'left': pg.AxisItem('left'), 'bottom': pg.AxisItem('bottom')})
+        self.imgVbWidget.addItem(self.imgVb, row=1, col=1)
+        self.img = pg.ImageItem(axisOrder = 'row-major')
+        self.scatterPlot = pg.ScatterPlotItem()
+        self.rois_draw = []
+        self.imgVb.addItem(self.img)
+        self.imgVb.setAspectLocked(True)
+        self.imgVb.invertY(True)
+        self.imgVb.addItem(self.scatterPlot)
+        self.img.setLevels([0, 10])
+
+        # image min,max levels related widgets
+        self.setLevelsButton = PushButton('Set levels')
+        self.levelMinLabel = FieldLabel('Level min')
+        self.levelMinEdit = LineEdit(str(0))
+        self.levelMinEdit.setMaximumWidth(50)
+        self.levelMaxLabel = FieldLabel('Level max')
+        self.levelMaxEdit = LineEdit(str(10))
+        self.levelMaxEdit.setMaximumWidth(50)
+
+        # Create layour and add widgets
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        self.layout().addWidget(self.imgVbWidget, 0, 0, 1, 5)
+        self.layout().addWidget(self.slider, 1, 0, 1, 4)
+        self.layout().addWidget(self.auto_play_button, 1, 4)
+        self.grid.addWidget(self.levelMinLabel, 2, 0)
+        self.grid.addWidget(self.levelMinEdit, 2, 1)
+        self.grid.addWidget(self.levelMaxLabel, 2, 2)
+        self.grid.addWidget(self.levelMaxEdit, 2, 3)
+        self.grid.addWidget(self.setLevelsButton, 2, 4)
+
+        self.reset()
+
+    def add_frame(self, frame):
+        self.stack.append(frame)
+        self.slider.setMaximum(len(self.stack) - 1)
+        self.update_display()
+
+    def add_frames_event(self, frames):
+        self.reset()
+        for frame in frames:
+            self.stack.append(frame)
+        self.slider.setMaximum(len(self.stack) - 1)
+        self.update_display()
+
+    def change_frame(self):
+        self.current_frame = self.slider.value()
+        self.update_display()
+
+    def toggle_auto_play(self):
+        if self.auto_play_button.isChecked():
+            self.timer.start(250)  # Set interval to 250 ms for faster autoplay
+        else:
+            self.timer.stop()
+
+    def next_frame(self):
+        self.current_frame = (self.current_frame + 1) % len(self.stack)
+        self.slider.setValue(self.current_frame)
+        self.update_display()
+
+    def update_display(self):
+        if self.stack:
+            frame = self.stack[self.current_frame]
+            self.img.setImage(frame, autoLevels=False)
+        
+    def reset(self):
+        self.stack = []
+        self.slider.setMaximum(0)
+
+
 class CoordListWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -456,8 +658,8 @@ class CoordTransformWidget(QtWidgets.QWidget):
         # create buttons
         self.saveCalibButton = PushButton('Save calibration')
         self.loadCalibButton = PushButton('Load calibration')
-        #self.setMFXROICalibrationButton = QtWidgets.QPushButton('Set MFX ROI calib.')
-        #self.setRepeatMeasCalibrationButton = QtWidgets.QPushButton('Rep. meas. calib.')
+        #self.setMFXROICalibrationButton = PushButton('Set MFX ROI calib.')
+        self.setRepeatMeasCalibrationButton = PushButton('Rep. meas. calib.')
         self.setDeleteMFXDatasetButton = PushButton('Top MFX dataset')
         self.setSaveDirButton = PushButton('Choose save directory')
         self.save_dir_edit = LineEdit('Default data folder')
@@ -529,8 +731,8 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.gui_calibration_title, currentRow, 0, 1, 3)
         currentRow += 1
         #self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 0)
-        #self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 2)
-        self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 1)
+        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 1)
+        self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 2)
         currentRow += 1
         self.grid.addWidget(self.timing_title, currentRow, 0, 1, 3)
         currentRow += 1
@@ -566,8 +768,8 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.transformCalibrationsPar.addItems(self.transformCalibrations)
         self.transformCalibrationsPar.setCurrentIndex(0)
 
-    #def setRepeatMeasCalibrationButtonText(self, coords):
-    #    self.setRepeatMeasCalibrationButton.setText(f'Rep. meas. calib.: [{coords[0]},{coords[1]}]')
+    def setRepeatMeasCalibrationButtonText(self, coords):
+        self.setRepeatMeasCalibrationButton.setText(f'Rep. meas. calib.: [{coords[0]},{coords[1]}]')
 
     #def setMFXROICalibrationButtonText(self, coords):
     #    self.setMFXROICalibrationButton.setText(f'Set MFX ROI calib.: [{coords[0]},{coords[1]}]')
