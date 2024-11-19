@@ -305,6 +305,7 @@ class EtMINFLUXController(QtCore.QObject):
             self.__confocalLineFrameCurr = 0
             self.__fast_frame += 1
             self.bufferLatestImages()
+            self.updateConfocalFrameDisp()
             if self.__confocalFramePause and not analysisSuccess:
                 self.confocalIntermittentPause()
 
@@ -633,7 +634,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__roiFollowMultipleCurrIdx = 0
         self.__roiFollowCurrCycle = 0
         self.__followingROIContinue = False
-        self._widget.setConfPauseTimerGUINullMessage()
+        self._widget.setConfGUINullMessages()
         self.resetTimerThreads()
 
     def resetTimerThreads(self):
@@ -1173,7 +1174,10 @@ class EtMINFLUXController(QtCore.QObject):
     def updateIntervalTimerDisp(self):
         time_left = (int(self._widget.conf_frame_pause_edit.text()) * 1000 - self.confIntervalDispTimer.elapsed())/1000
         if time_left >= 0:
-            self._widget.conf_guipausetimer_edit.setText(f'Time until confocal: {time_left:.0f} s')
+            self._widget.conf_guipausetimer_edit.setText(f'Time until next confocal: {time_left:.0f} s')
+
+    def updateConfocalFrameDisp(self):
+        self._widget.conf_frame_edit.setText(f'Confocal frames acquired: {self.__fast_frame+1}')
 
     def deleteMFXDataset(self, times=1):
         mouse.move(*self.__coordTransformHelper._set_topmfxdataset_button_pos)

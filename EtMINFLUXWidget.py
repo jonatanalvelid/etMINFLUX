@@ -134,9 +134,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.follow_ROI_mode_title = TitleLabel('ROI following mode')
         self.analysis_control_title = TitleLabel('Analysis control')
         # create updating info boxes
-        self.conf_guipausetimer_edit_nullmessage = 'Time until confocal: not running'
+        self.conf_guipausetimer_edit_nullmessage = 'Time until next confocal: not running'
         self.conf_guipausetimer_edit = LineEdit(self.conf_guipausetimer_edit_nullmessage)
         self.conf_guipausetimer_edit.setEditable(False)
+        self.conf_frame_edit_nullmessage = 'Confocal frames acquired: not running'
+        self.conf_frame_edit = LineEdit(self.conf_frame_edit_nullmessage)
+        self.conf_frame_edit.setEditable(False)
 
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
@@ -243,6 +246,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
         self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
@@ -315,8 +320,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_exc_laser_par.addItems(self.mfx_exc_lasers)
         self.mfx_exc_laser_par.setCurrentIndex(0)
     
-    def setConfPauseTimerGUINullMessage(self):
+    def setConfGUINullMessages(self):
         self.conf_guipausetimer_edit.setText(self.conf_guipausetimer_edit_nullmessage)
+        self.conf_frame_edit.setText(self.conf_frame_edit_nullmessage)
 
     def launchHelpWidget(self, widget, init=True):
         """ Launch the help widget. """
