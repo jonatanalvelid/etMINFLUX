@@ -7,7 +7,7 @@ import cv2
 
 
 def gag_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                     min_dist=1, num_peaks=500, thresh_abs_lo=0.5, thresh_abs_hi=300):
+                     num_peaks=300, thresh_abs_lo=1.7, thresh_abs_hi=10):
 
     """
     Common parameters:
@@ -35,7 +35,7 @@ def gag_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=
     img_ana = np.clip(img_ana, a_min=0, a_max=None)
     img_ana = img_ana.astype('float32')
     # get filter structuring element
-    size = int(2 * min_dist + 1)
+    size = int(2 * smoothing_radius_raw)
     footprint = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=[size,size])
     # maximum filter (dilation + equal)
     image_max = cv2.dilate(img_ana, kernel=footprint)

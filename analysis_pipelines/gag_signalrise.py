@@ -6,16 +6,20 @@ from scipy import ndimage as ndi
 import cv2
 import trackpy as tp
 import pandas as pd
+from scipy.optimize import curve_fit
 
 tp.quiet()
 
 def eucl_dist(a,b):
     return np.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2)
 
+def f(x, A, B):
+    return A*x + B
+
 def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                     min_dist=1, num_peaks=500, thresh_abs_lo=0.5, thresh_abs_hi=300, finalint=0.75, 
-                     border_limit=10, memory_frames=5, track_search_dist=10, frames_appear=4, 
-                     thresh_intincratio=1.5, thresh_intincratio_max=15, thresh_move_dist=2):
+                     min_dist_appear=5, num_peaks=300, thresh_abs_lo=1.7, thresh_abs_hi=10, finalintlo=0.75, 
+                     finalinthi=5, border_limit=10, memory_frames=6, track_search_dist=10, frames_appear=4, 
+                     thresh_intincratio=1.3, thresh_intincratio_max=15, intincslope=0.1, thresh_move_dist=1.3):
     """
     Common parameters:
     img - current image,
@@ -48,10 +52,7 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     memory_frames = int(memory_frames)
     meanlen = int(np.min([2, frames_appear]))  # for such short frames_appear (3), just use frames_appear instead
     track_search_dist = int(track_search_dist)
-    thresh_stayframes = int(frames_appear*1)  # can not be gone after it appears
-    
-    #if binary_mask is None:
-    #    binary_mask = np.ones(np.shape(img)).astype('uint16')
+    thresh_stayframes = int(frames_appear*0.7)  # can be gone after it appears, for 30% of frames that comes
     
     img = np.array(img).astype('float32')
     img_ana = ndi.gaussian_filter(img, smoothing_radius_raw)
@@ -59,7 +60,7 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     img_ana = np.clip(img_ana, a_min=0, a_max=None)
     img_ana = img_ana.astype('float32')
     # get filter structuring element
-    size = int(2 * min_dist + 1)
+    size = int(2 * smoothing_radius_raw)
     footprint = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=[size,size])
     # maximum filter (dilation + equal)
     image_max = cv2.dilate(img_ana, kernel=footprint)
@@ -106,77 +107,122 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     coords_event = np.empty((0,3))
     if len(tracks_all) > 0:
         # link coordinate traces (only last memory_frames+frames_appear frames, in order to be able to link tracks memory_frames ago for when a potential event appeared)
-        tracks_all = tracks_all[tracks_all['t']>max(tracks_all['t'])-memory_frames-frames_appear]
+        tracks_all = tracks_all[tracks_all['t']>max(tracks_all['t'])-3*frames_appear]
         tracks_all = tp.link(tracks_all, search_range=track_search_dist, memory=memory_frames, t_column='t')
         
         # event detection of appearing vesicles
         # conditions:
-        # 1. one track appears frames_appear ago
-        # 2. track stays for at least thresh_stayframes frames
-        # 3. intensity of track spot increases over frames_appear frames, before and after track appeared, with at least thresh_intincratio
-        # 4. check that final intensity is above a certain threshold
-        # 5. check that track has not moved too much in the last frames
-        # 6. check that final position is not outside the border_limit
+        # 1. one track appears inside frames_appear to 2*frames_appear ago
+        # 2. track stays for at least thresh_stayframes frames from time_timepoint
+        # 3. there is no other peak next to it when appearing (too uncertain)
+        # 4. intensity of track spot increases over frames_appear frames, before and after track appeared, with at least thresh_intincratio
+        # 5. check that final intensity is above a certain threshold
+        # 6. check that track has not moved too much in the last frames
+        # 7. check that final position is not outside the border_limit
         
         if timepoint >= 2*frames_appear:
             tracks_timepoint = tracks_all[tracks_all['t']==timepoint-frames_appear]
-            tracks_before = tracks_all[tracks_all['t']<timepoint-frames_appear]
             tracks_after = tracks_all[tracks_all['t']>timepoint-frames_appear]
-            #particle_ids_after = np.unique(tracks_after['particle'])
-            particle_ids_before = np.unique(tracks_before['particle'])
+            if timepoint >= 3*frames_appear:
+                tracks_prebefore = tracks_all[tracks_all['t']<timepoint-2*frames_appear]
+            tracks_before = tracks_all[(tracks_all['t']<timepoint-frames_appear) & (tracks_all['t']>=timepoint-2*frames_appear)]
+            if timepoint >= 3*frames_appear:
+                particle_ids_before = np.unique(tracks_prebefore['particle'])  # take older frames as check
+            else:
+                particle_ids_before = np.unique(tracks_before['particle'])  # take last frames_appear as check
             for _, track in tracks_timepoint.iterrows():
-                # check for appearing tracks
+                # check for appearing tracks, at 1x frames_appear to 3x frames_appear ago
                 particle_id = int(track['particle'])
                 if particle_id not in particle_ids_before:
                     # check that it stays for at least thresh_stayframes frames
                     track_self_after = tracks_after[tracks_after['particle']==particle_id]
-                    if len(track_self_after) == thresh_stayframes:
-                        print('')
-                        xev = track_self_after.iloc[-1]['x']
-                        yev = track_self_after.iloc[-1]['y']
-                        print(f'({yev}, {xev})')
-                        print('check 2 reached')
-                        # check that intensity of spot increases over the thresh_stay frames with at least thresh_intincratio
-                        #TODO: this check step can be improved, now that I have so short tracks (frames_appear ~2-3) with confocal instead of wf. Maybe a fit of the whole int. trace would work much better, than three ratio checks?
-                        track_self = track_self_after.tail(1)
-                        prev_frames = np.array(prev_frames).astype('float32')
-                        track_intensity_before = np.sum(prev_frames[-2*frames_appear:-frames_appear, int(track_self['x'])-intensity_sum_rad:int(track_self['x'])+intensity_sum_rad+1,
-                                                                   int(track_self['y'])-intensity_sum_rad:int(track_self['y'])+intensity_sum_rad+1],
-                                                               axis=(1,2))/(2*intensity_sum_rad+1)**2
-                        track_intensity_after = np.array(track_self_after['intensity'])
-                        track_intensity_arounddetect = np.array([track_intensity_before[-1], tracks_timepoint[tracks_timepoint['particle']==particle_id]['intensity'].iloc[0], track_intensity_after[0]])
-                        int_detect = np.mean(track_intensity_arounddetect)
-                        int_before = np.mean(track_intensity_before[:meanlen])
-                        int_after = np.mean(track_intensity_after[-meanlen:])
-                        intincrratio_before = int_detect/int_before
-                        intincrratio_after = int_after/int_detect
-                        print('int ratios before, after')
-                        print([intincrratio_before, intincrratio_after])
-                        if (intincrratio_before > thresh_intincratio and intincrratio_before < thresh_intincratio_max) and (intincrratio_after > thresh_intincratio and intincrratio_after < thresh_intincratio_max):
+                    if len(track_self_after) >= thresh_stayframes:
+                        track_full = tracks_all[tracks_all['particle']==particle_id]
+                        appearance_frame = np.min(track_full['t'])
+                        track_appearance = track_full[track_full['t']==appearance_frame]
+                        other_tracks_appearance = tracks_all[(tracks_all['t']==appearance_frame) & (tracks_all['particle']!=particle_id)]
+                        particle_dists = [eucl_dist((int(track_appearance['x']),int(track_appearance['y'])),(int(x2),int(y2))) for x2,y2 in zip(other_tracks_appearance['x'],other_tracks_appearance['y'])]
+                        if np.min(particle_dists) > min_dist_appear:
+                            track_self_before = tracks_before[tracks_before['particle']==particle_id]
+                            print('')
+                            xev = track_self_after.iloc[-1]['x']
+                            yev = track_self_after.iloc[-1]['y']
+                            print(f'frame {timepoint}')
+                            print(f'({yev}, {xev})')
                             print('check 3 reached')
-                            # check that final intensity of track is at least above finalint
-                            print('final intensity')
-                            print(int_after)
-                            if int_after > finalint:
-                                print('check 4 reached')
-                                # check that track has not moved too much since it appeared
-                                d_vects = [eucl_dist((int(x1),int(y1)),(int(x2),int(y2))) for x1,y1,x2,y2 in zip(track_self_after['x'].tail(-1),track_self_after['y'].tail(-1),track_self_after['x'],track_self_after['y'])]
-                                print('move distances')
-                                print(d_vects)
-                                if np.mean(d_vects) < thresh_move_dist:
-                                    print('check 5 reached')
-                                    # if all conditions are true: potential appearence event frames_appear ago, save coord of curr position
-                                    if int(track_self['x']) > border_limit and int(track_self['x']) < imgsize - border_limit and int(track_self['y']) > border_limit and int(track_self['y']) < imgsize - border_limit:
-                                        # last check that event is not inside the border, if it is just continue looking at the next track
-                                        print('check 6 reached')
-                                        print('int ratios before, after')
-                                        print([intincrratio_before, intincrratio_after])
-                                        print('ints before, detect, after')
-                                        print([int_before, int_detect, int_after])
-                                        print('track intensity')
-                                        print(tracks_all[(tracks_all['particle']==particle_id)]['intensity'].tolist())
-                                        coords_event = np.array([[int(track_self['x']), int(track_self['y'])]])
-                                        break
+                            # check that intensity of spot increases over the thresh_stay frames with at least thresh_intincratio
+                            #TODO: this check step can be improved, now that I have so short tracks (frames_appear ~2-3) with confocal instead of wf. Maybe a fit of the whole int. trace would work much better, than three ratio checks?
+                            track_self = track_self_after.tail(1)
+                            prev_frames = np.array(prev_frames).astype('float32')
+                            if len(track_self_before) > 0:
+                                track_intensity_before = np.array(track_self_before['intensity'])
+                            else:
+                                track_intensity_before = np.sum(prev_frames[-2*frames_appear:-frames_appear, int(track_self['x'])-intensity_sum_rad:int(track_self['x'])+intensity_sum_rad+1,
+                                                                        int(track_self['y'])-intensity_sum_rad:int(track_self['y'])+intensity_sum_rad+1],
+                                                                    axis=(1,2))/(2*intensity_sum_rad+1)**2
+                            track_intensity_after = np.array(track_self_after['intensity'])
+                            if len(track_self_before) == 0:
+                                track_intensity_arounddetect = np.array([track_intensity_before[-1], tracks_timepoint[tracks_timepoint['particle']==particle_id]['intensity'].iloc[0], track_intensity_after[0]])
+                                int_detect = np.mean(track_intensity_arounddetect)
+                                int_before = np.mean(track_intensity_before[:meanlen])
+                                int_after = np.mean(track_intensity_after[-meanlen:])
+                                intincrratio_before = int_detect/int_before
+                                intincrratio_after = int_after/int_detect
+                                print('int ratios before, after')
+                                print([intincrratio_before, intincrratio_after])
+                                if (intincrratio_before > thresh_intincratio and intincrratio_before < thresh_intincratio_max) and (intincrratio_after > thresh_intincratio and intincrratio_after < thresh_intincratio_max):
+                                    print('check 4 reached')
+                                    # check that final intensity of track is at least above finalint
+                                    print('final intensity')
+                                    print(int_after)
+                                    if int_after > finalintlo and int_after < finalinthi:
+                                        print('check 5 reached')
+                                        # check that track has not moved too much since it appeared
+                                        d_vects = [eucl_dist((int(x1),int(y1)),(int(x2),int(y2))) for x1,y1,x2,y2 in zip(track_self_after['x'].tail(-1),track_self_after['y'].tail(-1),track_self_after['x'],track_self_after['y'])]
+                                        print('move distances')
+                                        print(d_vects)
+                                        if np.mean(d_vects) < thresh_move_dist:
+                                            print('check 6 reached')
+                                            # if all conditions are true: potential appearence event frames_appear ago, save coord of curr position
+                                            if int(track_self['x']) > border_limit and int(track_self['x']) < imgsize - border_limit and int(track_self['y']) > border_limit and int(track_self['y']) < imgsize - border_limit:
+                                                # last check that event is not inside the border, if it is just continue looking at the next track
+                                                print('check 7 reached')
+                                                print('ints before, detect, after')
+                                                print([int_before, int_detect, int_after])
+                                                print('track intensity')
+                                                print(tracks_all[(tracks_all['particle']==particle_id)]['intensity'].tolist())
+                                                coords_event = np.array([[int(track_self['x']), int(track_self['y'])]])
+                                                break
+                            else:
+                                track_intensity_all = np.concatenate((track_intensity_before, np.array([tracks_timepoint[tracks_timepoint['particle']==particle_id]['intensity'].iloc[0]]), track_intensity_after)).tolist()
+                                x = np.linspace(0,len(track_intensity_all)-1,len(track_intensity_all))
+                                sigma = np.ones(len(x))
+                                sigma[[0]] = 0.01
+                                popt, _ = curve_fit(f, x, track_intensity_all, sigma=sigma)
+                                print('slope fit')
+                                print(popt[0])
+                                if popt[0] > intincslope:
+                                    print('check 4 reached')
+                                    # check that final intensity of track is at least above finalint
+                                    int_after = np.mean(track_intensity_after[-meanlen:])
+                                    print('final intensity')
+                                    print(int_after)
+                                    if int_after > finalintlo and int_after < finalinthi:
+                                        print('check 5 reached')
+                                        # check that track has not moved too much since it appeared
+                                        d_vects = [eucl_dist((int(x1),int(y1)),(int(x2),int(y2))) for x1,y1,x2,y2 in zip(track_self_after['x'].tail(-1),track_self_after['y'].tail(-1),track_self_after['x'],track_self_after['y'])]
+                                        print('move distances')
+                                        print(d_vects)
+                                        if np.mean(d_vects) < thresh_move_dist:
+                                            print('check 6 reached')
+                                            # if all conditions are true: potential appearence event frames_appear ago, save coord of curr position
+                                            if int(track_self['x']) > border_limit and int(track_self['x']) < imgsize - border_limit and int(track_self['y']) > border_limit and int(track_self['y']) < imgsize - border_limit:
+                                                # last check that event is not inside the border, if it is just continue looking at the next track
+                                                print('check 7 reached')
+                                                print('track intensity')
+                                                print(tracks_all[(tracks_all['particle']==particle_id)]['intensity'].tolist())
+                                                coords_event = np.array([[int(track_self['x']), int(track_self['y'])]])
+                                                break
 
     coords_event = np.flip(coords_event, axis=1)  # seems to be needed in this pipeline
 
