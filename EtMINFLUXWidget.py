@@ -39,7 +39,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.experimentModesPar.addItems(self.experimentModes)
         self.experimentModesPar.setCurrentIndex(0)
         # generate dropdown list for ROI following modes
-        self.roiFollowingModes = ['Single','SingleRedetect','Multiple']
+        self.roiFollowingModes = ['Single','SingleRedetect','Multiple','MultipleDetect']
         self.roiFollowingModesPar = ComboBox()
         self.roiFollowingModesPar_label = FieldLabel('ROI following mode')
         self.roiFollowingModesPar.addItems(self.roiFollowingModes)
@@ -125,6 +125,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.follow_roi_interval_edit = LineEdit(str(60))
         self.follow_roi_redetectthresh_label = FieldLabel('Redetect dist threshold (px)')
         self.follow_roi_redetectthresh_edit = LineEdit(str(20))
+        self.multiple_detect_window_label = FieldLabel('Multiple event detection window (min)')
+        self.multiple_detect_window_edit = LineEdit(str(10))
         # create GUI group titles
         self.saving_title = TitleLabel('Saving')
         self.binary_title = TitleLabel('Binary mask')
@@ -237,27 +239,34 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.init_frames_label, currentRow, 0)
         self.grid.addWidget(self.init_frames_edit, currentRow, 1)
-        self.grid.addWidget(self.saving_title, currentRow, 2, 1, 3)
+        self.grid.addWidget(self.multiple_detect_window_label, currentRow, 2)
+        self.grid.addWidget(self.multiple_detect_window_edit, currentRow, 3)
         currentRow += 1
         self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
         self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
+        self.grid.addWidget(self.saving_title, currentRow, 2, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
         self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 3)
         self.grid.addWidget(self.autoSaveCheck, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
-        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
-        currentRow += 1
         self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
 
-    def resetHelpWidget(self):
+    def resetHelpWidgets(self):
+        # create help widgets for showing the analysis results, and list all detected ROIs in one analysis run
         self.analysisHelpWidget = AnalysisWidget()
         self.coordListWidget = CoordListWidget()
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
+        # create help widgets for showing and listing all MFX ROIs that currently are planned to being looped through in a multi MFX ROI experiments (following or single loop)
+        self.multiMFXROIHelpWidget = AnalysisWidget()
+        self.multiMFXROIcoordListWidget = CoordListWidget()
+        self.multiMFXROIHelpWidget.addWidgetRight(self.multiMFXROIcoordListWidget)
 
     def resetEventViewWidget(self):
         self.eventViewWidget = EventWidget()
@@ -432,23 +441,24 @@ class EventWidget(QtWidgets.QWidget):
         # Create image viewer and intensity graph widgets
         self.image_viewer = StackViewerWidget(self)
         self.intensity_graph = IntensityGraphWidget(self)
+
+        # generate dropdown list for detected events
+        self.eventIndexes = []
+        self.eventsPar = ComboBox()
+        self.eventsPar.addItems(self.eventIndexes)
+        self.eventsPar.setCurrentIndex(None)  # TODO: have to check if this works
         
         # Create a grid layout and add widgets
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
-        self.grid.addWidget(self.image_viewer, 0, 0)
-        self.grid.addWidget(self.intensity_graph, 0, 1)
+        self.grid.addWidget(self.eventsPar, 0, 0)
+        self.grid.addWidget(self.image_viewer, 1, 0)
+        self.grid.addWidget(self.intensity_graph, 1, 1)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QPoint(0,970)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
-        
-    def add_frame_and_intensity(self, image, intensity):
-        # Add frame to image viewer and update intensity trace
-        self.image_viewer.add_frame(image)
-        # Update intensity graph with the full trace
-        self.intensity_graph.update_plot_postevent(intensity)
 
     def add_event(self, image_stack, intensity_trace):
         self.image_viewer.add_frames_event(image_stack)
@@ -484,13 +494,11 @@ class IntensityGraphWidget(QtWidgets.QWidget):
 
         self.reset()
         
-    def update_plot(self):
+    def update_plot(self, event_frame, intensity_trace):
         self.ax.clear()
         # plot vertical lines for event
-        self.ax.axvline(x=self.event_frame, linewidth=4, color='g', alpha=0.6)
-        #self.ax.axvline(x=self.event_frame-frappe, linewidth=4, color='r', alpha=0.6)
-        #self.ax.axvline(x=self.event_frame-2*frappe, linewidth=4, color='b', alpha=0.6)
-        self.ax.plot(self.intensity_trace, 'r-')
+        self.ax.axvline(x=event_frame, linewidth=4, color='g', alpha=0.6)
+        self.ax.plot(intensity_trace, 'r-')
         self.ax.set_title("Event area intensity")
         self.ax.set_xlabel("Frame")
         self.ax.set_ylabel("Intensity")
@@ -498,19 +506,13 @@ class IntensityGraphWidget(QtWidgets.QWidget):
 
     def update_plot_event(self, intensity_trace):
         if len(intensity_trace) == 1:
-            self.event_frame = 0
+            event_frame = 0
         else:
-            self.event_frame = len(intensity_trace)
-        self.intensity_trace = intensity_trace
-        self.update_plot()
-
-    def update_plot_postevent(self, intensity_trace):
-        self.intensity_trace = intensity_trace
-        self.update_plot()
+            event_frame = len(intensity_trace)
+        self.update_plot(event_frame, intensity_trace)
 
     def reset(self):
-        self.event_frame = None
-        self.intensity_trace = []
+        self.update_plot(0,[])
 
 
 class StackViewerWidget(QtWidgets.QWidget):
@@ -574,11 +576,6 @@ class StackViewerWidget(QtWidgets.QWidget):
 
         self.reset()
 
-    def add_frame(self, frame):
-        self.stack.append(frame)
-        self.slider.setMaximum(len(self.stack) - 1)
-        self.update_display()
-
     def add_frames_event(self, frames):
         self.reset()
         for frame in frames:
@@ -621,6 +618,8 @@ class CoordListWidget(QtWidgets.QWidget):
         self.list = QtWidgets.QListWidget()
         self.list.setVerticalScrollMode(QtWidgets.QListWidget.ScrollPerPixel)
 
+        self.roi_ids = []
+
         # create widget fields for the ROI list
         self.delROIButton = PushButton('Delete ROI')
         self.numevents_edit_nullmessage = 'Number of detected events: not running'
@@ -636,20 +635,27 @@ class CoordListWidget(QtWidgets.QWidget):
 
     def addCoords(self, coord_list, roi_sizes, colors):
         self.clearList()
+        roi_id = 0
         for coord, roi_size, color in zip(coord_list, roi_sizes, colors):
-            self.addCoord(coord, roi_size, color)
+            self.addCoord(coord, roi_size, color, roi_id)
+            roi_id += 1
 
-    def addCoord(self, coord, roi_size, color):
-        listitem = QtWidgets.QListWidgetItem(f'Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
+    def addCoord(self, coord, roi_size, color, roi_id):
+        listitem = QtWidgets.QListWidgetItem(f'Id: {roi_id}, Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
         self.list.addItem(listitem)
+        self.roi_ids.append(roi_id)
 
     def deleteCoord(self, idx):
-        self.list.takeItem(0)
+        roiid_delete = int(self.list.item(idx).text().split(', Pos')[0].split('Id: '))
+        self.list.takeItem(idx)
+        self.roi_ids.pop(self.roi_ids.index(roiid_delete))
+        return roiid_delete
 
     def clearList(self):
         last_item = True
         while last_item is not None:
             last_item = self.list.takeItem(0)
+        self.roi_ids = []
 
 
 class CoordTransformWidget(QtWidgets.QWidget):
