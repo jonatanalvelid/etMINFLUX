@@ -161,15 +161,17 @@ class EtMINFLUXController(QtCore.QObject):
         self.__followingROIContinue = False
         self.__plotROI = False
         self.__confocalFramePause = False
+        self.__dualColor = False
         self.__conf_config = 'ov conf'
         self.__img_ana = None
+        self.__prev_event_coords_deque = deque(maxlen=100)
         self.__prevFrames = deque(maxlen=50)  # deque for previous fast frames
         self.__prevAnaFrames = deque(maxlen=50)  # deque for previous preprocessed analysis frames
         self.__binary_mask = None  # binary mask of regions of interest, used by certain pipelines, leave None to consider the whole image
         self.__binary_frames = 2  # number of frames to use for calculating binary mask 
         self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
-        self.__params_exclude = ['img', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
+        self.__params_exclude = ['img', 'img_ch2', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
         self.__rec_time_deadtime = 3  # deadtime when starting MINFLUX recordings, in s
 
     def getSaveFolder(self):
@@ -507,6 +509,7 @@ class EtMINFLUXController(QtCore.QObject):
             self._widget.initiateButton.setText('Initiate')
             self.resetPipelineParamVals()
             self.resetRunParams()
+            self.resetPrevEventsDeque()
 
     def loadTransform(self):
         """ Load a previously saved coordinate transform. """
@@ -527,6 +530,10 @@ class EtMINFLUXController(QtCore.QObject):
         self.pipeline = getattr(importlib.import_module(f'{pipelinename}'), f'{pipelinename}')
         self.__pipeline_params = signature(self.pipeline).parameters
         self._widget.initParamFields(self.__pipeline_params, self.__params_exclude)
+        if 'dualcolor' in pipelinename:
+            self.__dualColor = True
+        else:
+            self.__dualColor = False
 
     def initiateBinaryMask(self):
         """ Initiate the process of calculating a binary mask of the region of interest. """
@@ -645,6 +652,10 @@ class EtMINFLUXController(QtCore.QObject):
         self.__followingROIContinue = False
         self._widget.setConfGUINullMessages()
         self.resetTimerThreads()
+        
+    def resetPrevEventsDeque(self):
+        """ Reset deque where previous event coords are saved, in endless. """
+        self.__prev_event_coords_deque = deque(maxlen=100)
 
     def resetTimerThreads(self):
         if self.recTimeTimer.isActive():
@@ -686,6 +697,17 @@ class EtMINFLUXController(QtCore.QObject):
             # get image
             meas = self._imspector.active_measurement()
             self.img = np.squeeze(meas.stack(0).data()[0])
+            if self.__dualColor:
+                # if dual color confocal scan - find ch2 in imspector measurement data stacks (same size as ch1)
+                ch1_sh = np.shape(self.img)
+                for i in range(1,10):
+                    try:
+                        img = np.squeeze(meas.stack(i).data()[0])
+                        if np.shape(img) == ch1_sh:
+                            self.img_ch2 = img
+                            break
+                    except:
+                        pass
             # if recording mode is following ROI and we are currently following a ROI
             if self.__followingROIContinue:
                 analysisSuccess = True
@@ -726,16 +748,27 @@ class EtMINFLUXController(QtCore.QObject):
                     # if experiment mode
                     elif self.__runMode == RunMode.Experiment:
                         coords_detected, coords_scan, roi_size = self.postPipelineExperiment(coords_detected, roi_sizes)
-                        # move on with triggering modality switch, if we have detected or randomized coords
+                        # move on with triggering modality switch, if we have detected or randomized coords, and if detected coord is sufficiently far away from previous events
                         if len(coords_scan)>0:
-                            self.acquireMINFLUXFull(coords_scan, roi_size)
-                            self.helpImageGeneration(coords_detected, roi_sizes)
-                            if self.__prevFrames:
-                                self.initiateEventViewWidget(coords_scan)  # add all prevframes
-                                self.updateEventViewWidget(self.img.copy())  # update with detected frame
+                            # check if event coords are close to coords in previous event deques
+                            if len(self.__prev_event_coords_deque) > 0:
+                                dists = [np.sqrt((c_old[0]-coords_scan[0])**2+(c_old[1]-coords_scan[1])**2) for c_old in self.__prev_event_coords_deque]
+                                if np.min(dists) > 7:
+                                    new_event = True
+                                else:
+                                    new_event = False
                             else:
-                                self.initiateEventViewWidget(coords_scan, self.img.copy())  # update with detected frame
-                            analysisSuccess = True
+                                new_event = True
+                            if new_event:
+                                self.__prev_event_coords_deque.append(coords_scan)
+                                self.acquireMINFLUXFull(coords_scan, roi_size)
+                                self.helpImageGeneration(coords_detected, roi_sizes)
+                                if self.__prevFrames:
+                                    self.initiateEventViewWidget(coords_scan)  # add all prevframes
+                                    self.updateEventViewWidget(self.img.copy())  # update with detected frame
+                                else:
+                                    self.initiateEventViewWidget(coords_scan, self.img.copy())  # update with detected frame
+                                analysisSuccess = True
             # unset busy flag
             self.setBusyFalse()
         return analysisSuccess
@@ -755,9 +788,14 @@ class EtMINFLUXController(QtCore.QObject):
         self.__pipeline_start_file_prefix = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
         # run pipeline
         self.__pipeline_start_time = time.perf_counter()
-        coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
-                                                                                self.__exinfo, self.__presetROISize,
-                                                                                *self.__pipeline_param_vals)
+        if self.__dualColor:
+            coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.img_ch2, self.__prevFrames, self.__binary_mask,
+                                                                        self.__exinfo, self.__presetROISize,
+                                                                        *self.__pipeline_param_vals)
+        else:
+            coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.__prevFrames, self.__binary_mask,
+                                                                                    self.__exinfo, self.__presetROISize,
+                                                                                    *self.__pipeline_param_vals)
         self.__pipeline_end_time = time.perf_counter()
         self.__pipeline_runtimes.append(round((self.__pipeline_end_time-self.__pipeline_start_time)*1e3,3))  # in ms with µs precision
         return coords_detected, roi_sizes
@@ -891,17 +929,12 @@ class EtMINFLUXController(QtCore.QObject):
                 # take random detected coords (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = 0  # default value, if we do not have more
                 random_coord = False  # Set to False if you want top coord candidate, True if you want random coord
-                if random_coord == True:
-                    if np.size(coords_detected) > 2:
-                        idx = np.random.randint(len(coords_detected))
-                        coords_scan = coords_detected[idx,:]
-                    else:
-                        coords_scan = coords_detected[0]
-                elif random_coord == False:
-                    if np.size(coords_detected) > 2:
-                        coords_scan = coords_detected[idx,:]
-                    else:
-                        coords_scan = coords_detected[0]
+                if random_coord == True and np.size(coords_detected) > 2:
+                    idx = np.random.randint(len(coords_detected))
+                if np.size(coords_detected) > 2:
+                    coords_scan = coords_detected[idx,:]
+                else:
+                    coords_scan = coords_detected[0]
                 if not self.__presetROISize:
                     roi_size = roi_sizes[idx]
                 else:

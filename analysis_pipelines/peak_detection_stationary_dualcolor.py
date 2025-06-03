@@ -8,9 +8,9 @@ import pandas as pd
 
 tp.quiet()
 
-def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+def peak_detection_stationary_dualcolor(img, img_ch2, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                        maxfilter_kersize=5, thresh_abs=10, smoothing_radius=1, 
-                       border_limit=15, init_smooth=1, num_prev=4, msm_thresh=0.7):
+                       border_limit=15, init_smooth=1, num_prev=4, msm_thresh=0.7, ch2sig_thresh_lo=0.2, ch2sig_thresh_hi=10):
     """
     Common parameters:
     img - current image,
@@ -35,9 +35,10 @@ def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=No
         binary_mask = np.ones(np.shape(img)).astype('uint16')
 
     img = np.array(img).astype('float32')
+    img_ch2 = np.array(img_ch2).astype('float32')
     if init_smooth==1:
         img = ndi.gaussian_filter(img, smoothing_radius)
-
+    
     # multiply with binary mask
     img_ana = img * np.array(binary_mask)
 
@@ -72,15 +73,19 @@ def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=No
 
     # create initial exinfo, if first analysis frame
     if exinfo is None:
-        exinfo = pd.DataFrame(columns=['particle','frame','x','y','intensity'])
+        exinfo = pd.DataFrame(columns=['particle','frame','x','y','intensity','intensitych2'])
     coordinates = coordinates[coordinates[:, 0].argsort()]
     
     # extract intensities summed around each coordinate
     intensity_sum_rad = 3
+    intensity_sum_rad_ch2 = 3
     intensities = []
+    intensitiesch2 = []
     for coord in coordinates:
-        intensity = np.sum(img[coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1,coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
+        intensity = np.sum(img[coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1,coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
+        intensitych2 = np.sum(img_ch2[coord[1]-intensity_sum_rad_ch2:coord[1]+intensity_sum_rad_ch2+1,coord[0]-intensity_sum_rad_ch2:coord[0]+intensity_sum_rad_ch2+1])/(2*intensity_sum_rad_ch2+1)**2
         intensities.append(intensity)
+        intensitiesch2.append(intensitych2)
     
     # add to old list of coordinates
     if len(exinfo) > 0:
@@ -88,7 +93,7 @@ def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=No
     else:
         timepoint = 0
     if len(coordinates)>0:
-        coords_df = pd.DataFrame(np.hstack((np.array(range(len(coordinates))).reshape(-1,1),timepoint*np.ones(len(coordinates)).reshape(-1,1),coordinates,np.array(intensities).reshape(-1,1))),columns=['particle','frame','x','y','intensity'])
+        coords_df = pd.DataFrame(np.hstack((np.array(range(len(coordinates))).reshape(-1,1),timepoint*np.ones(len(coordinates)).reshape(-1,1),coordinates,np.array(intensities).reshape(-1,1),np.array(intensitiesch2).reshape(-1,1))),columns=['particle','frame','x','y','intensity','intensitych2'])
         tracks_all = pd.concat([exinfo, coords_df])
     else:
         tracks_all = exinfo
@@ -106,11 +111,11 @@ def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=No
                 # get the frame-to-frame square movement array in the last num_prev+1 frames
                 sm = [np.sqrt((line1[1]['y']-line2[1]['y'])**2+(line1[1]['x']-line2[1]['x'])**2) for line1, line2 in zip(movement.iterrows(),movement.iloc[1:].iterrows())]
                 if np.mean(sm) < msm_thresh:
-                    coords_events.append([[int(particle_track.iloc[-1]['x']), int(particle_track.iloc[-1]['y'])]])
-                    #break
+                    ch2sig = np.mean(particle_track['intensitych2'])
+                    if ch2sig > ch2sig_thresh_lo and ch2sig < ch2sig_thresh_hi:
+                        coords_events.append([[int(particle_track.iloc[-1]['x']), int(particle_track.iloc[-1]['y'])]])
     
     coords_events = np.array(coords_events)
-    #coords_event = np.flip(coords_event, axis=1)  # seems to be needed in this pipeline
     
     # generate random coordinate number to use from the user-provided inputs
     if len(coords_events) > 0:
@@ -118,5 +123,6 @@ def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=No
         coords_event_return = coords_events[coord_num]
     else:
         coords_event_return = np.empty((0,3))
-
-    return coords_event_return, roi_sizes, tracks_all, img_ana
+    #coords_event_return = np.flip(coords_event_return, axis=1)  # seems to be needed in this pipeline
+    
+    return coords_event_return, roi_sizes, tracks_all, img_ch2
