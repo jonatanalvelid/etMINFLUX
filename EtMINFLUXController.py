@@ -173,6 +173,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img', 'img_ch2', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
         self.__rec_time_deadtime = 3  # deadtime when starting MINFLUX recordings, in s
+        self.__min_dist_prev_event = 7  # minimum accepted distance to a previous event during the same recording (i.e. a run in endless mode etc)
 
     def getSaveFolder(self):
         self._dataDir = self._widget.coordTransformWidget.getSaveFolder()
@@ -187,6 +188,10 @@ class EtMINFLUXController(QtCore.QObject):
         self.__colors.append(col)
         return col
 
+    def getCalibrationValues(self):
+        self.getTimings()
+        self.__min_dist_prev_event = float(self._widget.coordTransformWidget.min_dist_prev_event_edit.text())
+
     def getTimings(self):
         self._sleepTime = float(self._widget.coordTransformWidget.time_sleep_edit.text())
         self._sleepTimeROISwitch = float(self._widget.coordTransformWidget.time_sleep_roiswitch_edit.text())
@@ -197,7 +202,7 @@ class EtMINFLUXController(QtCore.QObject):
         """ Initiate or stop an etMINFLUX experiment. """
         if not self.__running:
             # get timings from ROI input
-            self.getTimings()
+            self.getCalibrationValues()
             # read mfx sequence and lasers and laser powers from GUI
             sequenceIdx = self._widget.mfx_seq_par.currentIndex()
             self.mfx_seq = self._widget.mfx_seqs[sequenceIdx]
@@ -753,7 +758,7 @@ class EtMINFLUXController(QtCore.QObject):
                             # check if event coords are close to coords in previous event deques
                             if len(self.__prev_event_coords_deque) > 0:
                                 dists = [np.sqrt((c_old[0]-coords_scan[0])**2+(c_old[1]-coords_scan[1])**2) for c_old in self.__prev_event_coords_deque]
-                                if np.min(dists) > 7:
+                                if np.min(dists) > self.__min_dist_prev_event:
                                     new_event = True
                                 else:
                                     new_event = False

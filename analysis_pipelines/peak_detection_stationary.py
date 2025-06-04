@@ -18,16 +18,16 @@ def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=No
     binary_mask - binary mask of the region to consider
     testmode - to return preprocessed image or not
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
+    presetROIsize - preset ROI sizes boolean, if used or not (not applicable for this pipeline)
 
     Pipeline specific parameters:
     maxfilter_kersize - size of kernel for maximum filtering
-    peak_min_dist - minimum distance in pixels between two peaks
     thresh_abs - low intensity threshold in img_ana of the peaks to consider
-    num_peaks - number of peaks to track
     smoothing_radius - diameter of Gaussian smoothing of img_ana, in pixels
-    ensure_spacing - to ensure spacing between detected peaks or not (bool 0/1)
     border_limit - how much of the border to remove peaks from in pixels
     init_smooth - if to perform an initial smoothing of the raw image or not (bool 0/1)
+    num_prev - number of frames (num_prev+1) to consider for checking if it is stationary
+    msm_thresh - maximum threshold for msm, mean squared movement, between individual frames
     """
     roi_sizes = False
 
@@ -110,7 +110,6 @@ def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=No
                     #break
     
     coords_events = np.array(coords_events)
-    #coords_event = np.flip(coords_event, axis=1)  # seems to be needed in this pipeline
     
     # generate random coordinate number to use from the user-provided inputs
     if len(coords_events) > 0:
