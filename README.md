@@ -3,8 +3,10 @@ Event-triggered MINFLUX controller, written to interact with the Imspector softw
 
 ## Installation instructions
 No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget __main__.py should be run.
-The code requires a Python environment (such as a conda environment), has been tested with Python version 3.10, and has the following dependencies:
-- specpy (https://pypi.org/project/specpy/, v1.2.3 (see attached wheel file) used during development (works with Python 3.10), v1.2.1 available via pip works with Python 3.6 and has not been tested)
+
+The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10 and Imspector v16.3.15645, and has the following dependencies:
+- specpy (https://pypi.org/project/specpy/, v1.2.3 used during development (works with Python 3.10); v1.2.1 available via pip works with Python 3.6 and has not been tested. See below for more info on specpy version.)
+You can simply import it or use the wheel to install it into your python env.)
 - qtpy (https://pypi.org/project/QtPy/)
 - PyQt5
 - pyqtgraph
@@ -14,6 +16,7 @@ The code requires a Python environment (such as a conda environment), has been t
 - scipy
 - pynput (https://pypi.org/project/pynput/)
 - mouse (https://pypi.org/project/mouse/)
+  
 Individual implemented pipelines have among the following dependencies:
 - pandas
 - scikit-image
@@ -23,7 +26,8 @@ Individual implemented pipelines have among the following dependencies:
 ## Setup etMINFLUX
 To setup the python evniroment needed to run the etMINFLUX software, follow the following instructions.
 - Install a virtual environment using the provided etminflux.yml or requirements.txt files in this repository. Conda has been used during development and was used to export these files. 
-- Install specpy v1.2.3 using pip from the provided wheel file in the packages folder.
+- Additionally, in the new environment, install specpy v1.2.3 (or any matched specpy version for your version of Imspector, where >1.2.3 should work). An installation wheel file can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers). Copy the wheel file to your cloned repository, change folder to your repository in the command line, and install it using pip: pip install specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers).
+  
 In order to run event-triggered recordings, some settings need to be adjusted in Imspector.
 - A keyboard shortcut for setting a marked region as a MINFLUX ROI has to be created, which the code will use by simulating keyboard input. The shortcut should be set to Ctrl+Shift+Alt+m. This has to be done once and will be saved as long as Imspector settings are not reset. If this shortcut is already in use for something else, select another shortcut and adjust the code accordingly; find the relevant code in EtMINFLUXController, line 1312-1320.
 - The MINFLUX sequences to be triggered has to be added (replacing) in the list on line 73 in EtMINFLUXController.py.
