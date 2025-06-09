@@ -29,8 +29,7 @@ In order to run event-triggered recordings, some settings need to be adjusted in
 
 ## Publications
 The etMINFLUX codebase is used in the following publications:
-- Alvelid, Koerfer, Eggeling 2025, "___", manuscript submitted (bioRxiv: )
-- Koerfer, De Angelis, Alvelid, Carravilla, Eggeling, "___", manuscript in preparation
+- Alvelid, Koerfer, Eggeling 2025, "Event-triggered MINFLUX microscopy: smart microscopy to catch and follow rare events", manuscript (bioRxiv: )
 
 ## Contact
 If you have any questions about the repository, code, want to use it for your own experiments, or anything else, do not hesitate to contact Jonatan Alvelid on GitHub, BlueSky (@jonatanalvelid.bsky.social), by email (jonatan.alvelid(at)scilifelab.se), or open an issue in the repository.
