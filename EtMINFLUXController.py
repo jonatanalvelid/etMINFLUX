@@ -70,7 +70,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setTransformations(self.transformDir)
 
         # list of minflux sequences that can be triggered
-        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast', 'ja_seqTrk3D_dyn-SR', 'ja_seqTrk3D_gag-SRmemb', 'ja_triangle_dmp_lipids', 'ja_Trk2Dtriangle_dyn1etMINFLUX', 'ja_Trk2Dtriangle_cav1etMINFLUX', 'ak_hex_dmp1_100kHzbgc_13phtlim', 'ak_hex_dmp1_80kHzbgc_8phtlim', 'ak_hex_dmp1_100kHzbgc_12phtlim', 'ak_hex_dmp1_46kHzbgc_5phtlim', 'ak_hex_dmp1_60kHzbgc_8phtlim', 'ak_hex_dmp1_84kHzbgc_10phtlim', 'ak_hex_dmp1_50kHzbgc_6phtlim', 'ja_seqTrk3D_May2024-SR-40uW', 'ja_Trk2Dtriangle_confmfxoverlap']  # make sure that these options matches exactly those in Imspector
+        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast', 'ja_seqTrk3D_Peroxisomes_HaloJF646', 'ja_seqTrk3D_dyn-SR', 'ja_seqTrk3D_gag-SRmemb', 'ja_triangle_dmp_lipids', 'ja_Trk2Dtriangle_dyn1etMINFLUX', 'ja_Trk2Dtriangle_cav1etMINFLUX', 'ak_hex_dmp1_100kHzbgc_13phtlim', 'ak_hex_dmp1_80kHzbgc_8phtlim', 'ak_hex_dmp1_100kHzbgc_12phtlim', 'ak_hex_dmp1_46kHzbgc_5phtlim', 'ak_hex_dmp1_60kHzbgc_8phtlim', 'ak_hex_dmp1_84kHzbgc_10phtlim', 'ak_hex_dmp1_50kHzbgc_6phtlim', 'ja_seqTrk3D_May2024-SR-40uW', 'ja_Trk2Dtriangle_confmfxoverlap']  # make sure that these options matches exactly those in Imspector
         self._widget.setMfxSequenceList(self.mfxSeqList)
 
         # list of available lasers for MFX imaging, get this list manually from Imspector control software
@@ -1051,7 +1051,7 @@ class EtMINFLUXController(QtCore.QObject):
         """ Called after starting MINFLUX acquisition, if some additional info regarding detected coordinates should be viewed/saved. """
         ### TODO: THE ROI RECTANGLES AND SCATTER DOES NOT WORK FOR FOLLOWING ROI MODE - FIX IT!
         time.sleep(self._sleepTime)
-        self.setEventsImage(coords_detected)
+        #self.setEventsImage(coords_detected)
         if self.__plotROI:
             # set analysis image in help widget and plot detected coords in help widget
             self.helpPlotDetectedCoordsSignal.emit(coords_detected, roi_sizes)
