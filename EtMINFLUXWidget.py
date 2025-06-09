@@ -3,18 +3,18 @@ import os
 import pyqtgraph as pg
 import numpy as np
 import matplotlib.figure as mplfig
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QPoint
-
 from tkinter import TkVersion
 from tkinter.filedialog import askdirectory
-
 from guielements import *
 
 
 class EtMINFLUXWidget(QtWidgets.QWidget):
-    """ Widget for controlling the etMINFLUX implementation. """
+    """ View part of the View-Controller-based etMINFLUX smart microscopy software. A GUI for interacting with the Controller, 
+    with parameter fields to tweak acquisition settings, confocal and MINFLUX, analysis pipeline settings, and various calibration options. """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -347,7 +347,6 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.imgVbWidget.addItem(self.imgVb, row=1, col=1)
 
         self.img = pg.ImageItem(axisOrder = 'row-major')
-        #self.img.translate(-0.5, -0.5)
 
         self.scatterPlot = pg.ScatterPlotItem()
         self.rois_draw = []
@@ -367,7 +366,6 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.levelMaxLabel = FieldLabel('Level max')
         self.levelMaxEdit = LineEdit(str(1))
         self.levelMaxEdit.setMaximumWidth(50)
-        #self.mousePositionLabel = pg.LabelItem(text='Cursor: [nan, nan]', justify="right")
         
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
@@ -378,7 +376,6 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.levelMinEdit, 0, 2)
         self.grid.addWidget(self.levelMaxLabel, 0, 3)
         self.grid.addWidget(self.levelMaxEdit, 0, 4)
-        #self.grid.addWidget(self.mousePositionLabel, 0, 5)
         self.grid.addWidget(self.setLevelsButton, 0, 6)
         self.grid.addWidget(self.imgVbWidget, 1, 0, 1, 7)
 
@@ -386,19 +383,6 @@ class AnalysisWidget(QtWidgets.QWidget):
         topLeftPoint = QPoint(0,670)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
-
-    #    try:
-    #        # set up mouse signal proxy to label current mouse hover position in image
-    #        pg.SignalProxy(self.scatterPlot.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
-    #    except:
-    #        pass
-
-    #def mouseMoved(self, evt):
-    #    try:
-    #        mousePoint = self.scatterPlot.vb.mapSceneToView(evt[0])
-    #        self.mousePositionLabel.setText(f'Cursor: [{mousePoint.x()}, {mousePoint.y()}]')
-    #    except:
-    #        pass
 
     def removeROIs(self):
         for roi in self.rois_draw:
@@ -488,8 +472,6 @@ class IntensityGraphWidget(QtWidgets.QWidget):
         self.ax.clear()
         # plot vertical lines for event
         self.ax.axvline(x=self.event_frame, linewidth=4, color='g', alpha=0.6)
-        #self.ax.axvline(x=self.event_frame-frappe, linewidth=4, color='r', alpha=0.6)
-        #self.ax.axvline(x=self.event_frame-2*frappe, linewidth=4, color='b', alpha=0.6)
         self.ax.plot(self.intensity_trace, 'r-')
         self.ax.set_title("Event area intensity")
         self.ax.set_xlabel("Frame")
@@ -592,7 +574,7 @@ class StackViewerWidget(QtWidgets.QWidget):
 
     def toggle_auto_play(self):
         if self.auto_play_button.isChecked():
-            self.timer.start(250)  # Set interval to 250 ms for faster autoplay
+            self.timer.start(250)  # set frame interval to 250 ms
         else:
             self.timer.stop()
 
@@ -664,7 +646,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
         # create buttons
         self.saveCalibButton = PushButton('Save calibration')
         self.loadCalibButton = PushButton('Load calibration')
-        #self.setMFXROICalibrationButton = PushButton('Set MFX ROI calib.')
         self.setRepeatMeasCalibrationButton = PushButton('Rep. meas. calib.')
         self.setDeleteMFXDatasetButton = PushButton('Top MFX dataset')
         self.setSaveDirButton = PushButton('Choose save directory')
@@ -687,10 +668,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.conf_size_y_px_mon_label = FieldLabel('Confocal image size - y, monitor (pixels)')
         self.conf_size_y_px_mon_edit = LineEdit(str(0))
         self.conf_bottom_right_mon_button = PushButton('Click detect: confocal bottom right pixel')
-        #self.conf_size_um_label = FieldLabel('Confocal image size, scan (µm)')
-        #self.conf_size_um_edit = LineEdit(str(0))
-        #self.conf_size_px_label = FieldLabel('Confocal image size, scan (px)')
-        #self.conf_size_px_edit = LineEdit(str(0))
         # time sleeps and drag durations
         self.time_sleep_label = FieldLabel('Time sleeps (s)')
         self.time_sleep_edit = LineEdit(str(0.3))
@@ -734,17 +711,11 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.conf_size_y_px_mon_label, currentRow, 0)
         self.grid.addWidget(self.conf_size_y_px_mon_edit, currentRow, 1)
-        #currentRow += 1
-        #self.grid.addWidget(self.conf_size_um_label, currentRow, 0)
-        #self.grid.addWidget(self.conf_size_um_edit, currentRow, 1)
         currentRow += 1
-        #self.grid.addWidget(self.conf_size_px_label, currentRow, 0)
-        #self.grid.addWidget(self.conf_size_px_edit, currentRow, 1)
         self.grid.addWidget(self.saveCalibButton, currentRow, 2)
         currentRow += 1
         self.grid.addWidget(self.gui_calibration_title, currentRow, 0, 1, 3)
         currentRow += 1
-        #self.grid.addWidget(self.setMFXROICalibrationButton, currentRow, 0)
         self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 1)
         self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 2)
         currentRow += 1
@@ -790,9 +761,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
     def setRepeatMeasCalibrationButtonText(self, coords):
         self.setRepeatMeasCalibrationButton.setText(f'Rep. meas. calib.: [{coords[0]},{coords[1]}]')
 
-    #def setMFXROICalibrationButtonText(self, coords):
-    #    self.setMFXROICalibrationButton.setText(f'Set MFX ROI calib.: [{coords[0]},{coords[1]}]')
-
     def setDeleteMFXDatasetButtonText(self, coords):
         self.setDeleteMFXDatasetButton.setText(f'Top MFX dataset: [{coords[0]},{coords[1]}]')
 
@@ -803,7 +771,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.save_dir_edit.setText(folder)
 
 
-# Copyright (C) 2023-2023 Jonatan Alvelid
+# Copyright (C) 2023-2025 Jonatan Alvelid
 #
 # EtMINFLUX is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

@@ -7,12 +7,15 @@ import math
 def peak_detection_def(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                        maxfilter_kersize=5, peak_min_dist=7, thresh_abs=2, num_peaks=50, smoothing_radius=1, 
                        border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6, coord_num=10):
+    
     """
+    Analysis pipeline to detect peaks in an image, using a maximum intensity detection filter, and then returning 
+    coordinates of a specific peak index.
+    
     Common parameters:
     img - current image,
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
-    testmode - to return preprocessed image or not
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
 
     Pipeline specific parameters:
@@ -21,9 +24,10 @@ def peak_detection_def(img, prev_frames=None, binary_mask=None, exinfo=None, pre
     thresh_abs - low intensity threshold in img_ana of the peaks to consider
     num_peaks - number of peaks to track
     smoothing_radius - diameter of Gaussian smoothing of img_ana, in pixels
-    ensure_spacing - to ensure spacing between detected peaks or not (bool 0/1)
     border_limit - how much of the border to remove peaks from in pixels
     init_smooth - if to perform an initial smoothing of the raw image or not (bool 0/1)
+    roi_border - non-valid border around the peak to consider for ROI size calculation
+    coord_num - index of the peak to return coordinates for (0-based, intensity-sorted)
     """
     roi_sizes = False
 
@@ -61,7 +65,7 @@ def peak_detection_def(img, prev_frames=None, binary_mask=None, exinfo=None, pre
     coordinates = tuple(arr for arr in coordinates)
     coordinates = np.transpose(coordinates)[idx_maxsort]
 
-    # remove everything on the border (takes ~2-3ms if there are a lot of detected coordinates, but usually this is not the case)
+    # remove everything on the border
     imsize = np.shape(img)[0]
     idxremove = []
     for idx, coordpair in enumerate(coordinates):

@@ -18,6 +18,9 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
                      thresh_intincratio_max=5.0, thresh_move_dist=1.5):
 
     """
+    Analysis pipeline that detects a rapidly increasing spot-like signal (0-maximum intensity inside ~5-20 frames),
+    used for detecting fast accumulation of dynamin1 signal at endocytic sites.
+    
     Common parameters:
     img - current image,
     prev_frames - previous image(s)
@@ -31,12 +34,11 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     thresh_abs_lo - low intensity threshold in img_ana of the peaks to consider
     thresh_abs_hi - high intensity threshold in img_ana of the peaks to consider
     border_limit - how much of the border to remove peaks from
-    smoothing_radius - diameter of Gaussian smoothing of img_ana, in pixels
     memory_frames - number of frames for which a vesicle can disappear but still be connected to the same track
     track_search_dist - number of pixels a vesicle is allowed to move from one frame to the next
     frames_appear - number of frames ago peaks of interest appeared (to minimize noisy detections and allowing to track intensity change over time before deicision)
-    thresh_stayratio - ratio of frames of the frames_appear that the peak has to be present in
     thresh_intincratio - the threshold ratio of the intensity increase in the area of the peak
+    thresh_intincratio_max - the max threshold ratio of the intensity increase in the area of the peak
     thresh_move_dist - the threshold start-end distance a peak is allowed to move during frames_appear
     """
     
@@ -50,13 +52,7 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     frames_appear = int(frames_appear)
     memory_frames = int(memory_frames)
     track_search_dist = int(track_search_dist)
-    thresh_stayframes = int(frames_appear)-1  # only need to check shortly after, otherwise we are too slow for dynamin events - at least in 10s sampling
-    # TODO: Change thresh_stayframes for shorter frame interval times, maybe I can increase it again?
-    #meanlen = np.max([2,int(np.floor(frames_appear/2))])  # for such short frames_appear and fast events, use frames_appear instead
-    #track_len = 2 * frames_appear + 1  # number of last frames to keep in the tracking (more frames = slower track linking)
-    
-    #if binary_mask is None:
-    #    binary_mask = np.ones(np.shape(img)).astype('uint16')
+    thresh_stayframes = int(frames_appear)-1
     
     # gaussian filter raw image
     img = np.array(img).astype('float32')
@@ -71,8 +67,7 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     # further filtering to get a better image for peak detection
     #img_ana = img_dog * binary_mask
     img_ana = img_dog.astype('float32')
-    img_ana = ndi.gaussian_filter(img_ana, smoothing_radius)  # Gaussian filter the image, to remove noise and so on, to get a better center estimate
-    #img_ana[img_ana > thresh_abs_hi] = thresh_abs_hi  # this is done further down anyway?
+    img_ana = ndi.gaussian_filter(img_ana, smoothing_radius)  # Gaussian filter the image, to remove noise, to get a better center estimate
     # Peak_local_max all-in-one as a combo of opencv and cupy
     # get filter structuring element
     size = int(2 * min_dist + 1)
@@ -124,7 +119,6 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
         # link coordinate traces (only last memory_frames+frames_appear frames, in order to be able to link tracks memory_frames ago for when a potential event appeared)
         tracks_all = tracks_all[tracks_all['t']>max(tracks_all['t'])-memory_frames-frames_appear]
         tracks_all = tp.link(tracks_all, search_range=track_search_dist, memory=memory_frames, t_column='t')
-        #tracks_all_use = tracks_all[tracks_all['t']>max(tracks_all['t'])-memory_frames-frames_appear]
         
         # event detection of appearing vesicles
         # conditions:
@@ -137,7 +131,6 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
             tracks_timepoint = tracks_all[tracks_all['t']==timepoint-frames_appear]
             tracks_before = tracks_all[tracks_all['t']<timepoint-frames_appear]
             tracks_after = tracks_all[tracks_all['t']>timepoint-frames_appear]
-            #particle_ids_after = np.unique(tracks_after['particle'])
             particle_ids_before = np.unique(tracks_before['particle'])
             for _,track in tracks_timepoint.iterrows():
                 # check for appearing tracks
@@ -146,7 +139,6 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
                     # check that it stays for at least thresh_stayframes frames
                     track_self_after = tracks_after[tracks_after['particle']==particle_id]
                     if len(track_self_after) >= thresh_stayframes:
-                        #print('check 3 reached')
                         # check that intensity of spot increases over the thresh_stay frames with at least thresh_intincratio, in one of the three ratios
                         # and that it increases in all three ratios
                         track_self = track_self_after.tail(1)
@@ -162,38 +154,15 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
                         intincrratio_before = int_detect/int_before
                         intincrratio_after = int_after/int_detect
                         if (intincrratio_before > thresh_intincratio and intincrratio_before < thresh_intincratio_max) and (intincrratio_after > thresh_intincratio and intincrratio_after < thresh_intincratio_max):
-                            xev = track_self_after.iloc[-1]['x']
-                            yev = track_self_after.iloc[-1]['y']
-                            print('')
-                            print(f'({yev}, {xev})')
-                            print('check 4 reached')
                             # check that track has not moved too much since it appeared
-                            # TODO Change this to a std-check? Should be more robust
-                            #track_self_after_start = track_self_after.head(1)
-                            #track_self_after_end = track_self_after.tail(1)
-                            #d_start_end = eucl_dist((int(track_self_after_start['x']),int(track_self_after_start['y'])),(int(track_self_after_end['x']),int(track_self_after_end['y'])))
-                            #d_std_after = np.std(track_self_after['x'])
                             d_vects = [eucl_dist((int(x1),int(y1)),(int(x2),int(y2))) for x1,y1,x2,y2 in zip(track_self_after['x'].tail(-1),track_self_after['y'].tail(-1),track_self_after['x'],track_self_after['y'])]
-                            #if d_start_end < thresh_move_dist:
-                            print('move distances')
-                            print(d_vects)
                             if np.mean(d_vects) < thresh_move_dist:
-                                print('check 5 reached')
-                                #print(track_self_after)
-                                #print(d_start_end)
                                 # if all conditions are true: potential appearence event frames_appear ago, save coord of curr position
                                 if int(track_self['x']) > border_limit and int(track_self['x']) < imgsize - border_limit and int(track_self['y']) > border_limit and int(track_self['y']) < imgsize - border_limit:
-                                    # last check that event is not inside the border, if it is just continue looking at the next track
-                                    print('check 6 reached')
-                                    print('int ratios before, after')
-                                    print([intincrratio_before, intincrratio_after])
-                                    print('ints before, detect, after')
-                                    print([int_before, int_detect, int_after])
-                                    print('track intensity')
-                                    print(tracks_all[(tracks_all['particle']==particle_id)]['intensity'].tolist())
+                                    # last check that event is not on the border, if it is just continue looking at the next track
                                     coords_event = np.array([[int(track_self['x']), int(track_self['y'])]])
                                     break
 
-    coords_event = np.flip(coords_event, axis=1)  # seems to be needed in this pipeline
+    coords_event = np.flip(coords_event, axis=1)
 
     return coords_event, roi_sizes, tracks_all, img_ana

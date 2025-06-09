@@ -10,15 +10,16 @@ def gag_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=
                      num_peaks=300, thresh_abs_lo=1.7, thresh_abs_hi=10):
 
     """
+    Analysis pipeline to be used for the visualize testing mode, that only performs the peak detection,
+    allowing tweaking of peak detection parameters.
+    
     Common parameters:
-    img - current image,
+    img - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
-    testmode - to return preprocessed image or not
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
 
     Pipeline specific parameters:
-    min_dist - minimum distance in pixels between two peaks
     num_peaks - number of peaks to track
     thresh_abs_lo - low intensity threshold in img_ana of the peaks to consider
     thresh_abs_hi - high intensity threshold in img_ana of the peaks to consider

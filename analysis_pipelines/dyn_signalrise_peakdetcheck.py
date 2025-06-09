@@ -10,11 +10,13 @@ def dyn_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=
                      min_dist=1, num_peaks=1000, thresh_abs_lo=1.1, thresh_abs_hi=15):
 
     """
+    Analysis pipeline to be used for the visualize testing mode, that only performs the peak detection,
+    allowing tweaking of peak detection parameters.
+       
     Common parameters:
-    img - current image,
+    img - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
-    testmode - to return preprocessed image or not
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
 
     Pipeline specific parameters:

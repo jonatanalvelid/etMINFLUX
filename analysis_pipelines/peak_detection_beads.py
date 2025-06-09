@@ -5,20 +5,24 @@ import cv2
 def peak_detection_beads(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                        maxfilter_kersize=5, thresh_abs=10, smoothing_radius=1, init_smooth=1, 
                        border_limit=15, coord_num_lim_lo=10, coord_num_lim_hi=25):
+    
     """
+    Analysis pipeline to detect peaks in an image of fluorescent beads, using a maximum intensity detection filter.
+    
     Common parameters:
     img - current image,
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
-    testmode - to return preprocessed image or not
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
 
     Pipeline specific parameters:
     maxfilter_kersize - size of kernel for maximum filtering
     thresh_abs - low intensity threshold in img_ana of the peaks to consider
     smoothing_radius - diameter of Gaussian smoothing of img_ana, in pixels
-    border_limit - how much of the border to remove peaks from in pixels
     init_smooth - if to perform an initial smoothing of the raw image or not (bool 0/1)
+    border_limit - how much of the border to remove peaks from in pixels
+    coord_num_lim_lo - lower index limit of the peak indexes to return, after sorted by intensity
+    coord_num_lim_hi - upper index limit of the peak indexes to return, after sorted by intensity
     """
     roi_sizes = False
 

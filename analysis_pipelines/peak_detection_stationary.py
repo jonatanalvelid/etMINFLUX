@@ -11,7 +11,11 @@ tp.quiet()
 def peak_detection_stationary(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                        maxfilter_kersize=5, thresh_abs=10, smoothing_radius=1, 
                        border_limit=15, init_smooth=1, num_prev=4, msm_thresh=0.7):
+    
     """
+    Analysis pipeline to detect bright peaks that are stationary in an image, using a maximum intensity detection filter,
+    and then checking if they are stationary inside the previous frames. Only return a random stationary peak.
+    
     Common parameters:
     img - current image,
     prev_frames - previous image(s)

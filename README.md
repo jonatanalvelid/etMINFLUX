@@ -23,10 +23,12 @@ Individual implemented pipelines have among the following dependencies:
 ## Setup etMINFLUX
 In order to run event-triggered recordings, some settings need to be adjusted in Imspector.
 - A keyboard shortcut for setting a marked region as a MINFLUX ROI has to be created, which the code will use by simulating keyboard input. The shortcut should be set to Ctrl+Shift+Alt+m. This has to be done once and will be saved as long as Imspector settings are not reset. If this shortcut is already in use for something else, select another shortcut and adjust the code accordingly; find the relevant code in EtMINFLUXController, line 1312-1320.
-- The MINFLUX sequences to be triggered has to be added (replacing) in the list on line 73 in EtMINFLUXController.py. 
+- The MINFLUX sequences to be triggered has to be added (replacing) in the list on line 73 in EtMINFLUXController.py.
+- Create empty folders dataDir and transformsDir, for data saving and calibration files, and update these folders on line 42-43 in EtMINFLUXController.py. (Recommended: in User\Documents)
+- If the specpy package does not find a connection with an open Imspector version, a mock Imspector class will be run that allows testing of the GUI.
 
 ## Run an etMINFLUX experiment
-
+- Run the etMINFLUX software by running __main__.py in this folder.
 
 ## Publications
 The etMINFLUX codebase is used in the following publications:
