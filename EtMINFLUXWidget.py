@@ -700,11 +700,14 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.drag_dur_edit = LineEdit(str(0.15))
         self.save_time_label = FieldLabel('Save time (s)')
         self.save_time_edit = LineEdit(str(3))
+        self.min_dist_prev_event_label = FieldLabel('Min distance to previous events (px)')
+        self.min_dist_prev_event_edit = LineEdit(str(7))
 
         # Create titles
         self.gui_calibration_title = TitleLabel('GUI calibration')
         self.coord_transform_title = TitleLabel('Coordinate transform')
         self.timing_title = TitleLabel('Timing')
+        self.dists_title = TitleLabel('Distances')
         self.saving_title = TitleLabel('Saving')
 
         # generate GUI layout
@@ -758,6 +761,11 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.save_time_label, currentRow, 0)
         self.grid.addWidget(self.save_time_edit, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.dists_title, currentRow, 0, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.min_dist_prev_event_label, currentRow, 0)
+        self.grid.addWidget(self.min_dist_prev_event_edit, currentRow, 1)
         currentRow += 1
         self.grid.addWidget(self.saving_title, currentRow, 0, 1, 3)
         currentRow += 1
