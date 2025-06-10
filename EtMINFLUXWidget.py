@@ -31,6 +31,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # generate dropdown list for coordinate transformations
         self.transformPipelines = list()
         self.transformPipelinePar = ComboBox()
+        self.transformPipelinePar.setEnabled(False)
         self.transformPipelineLabel = FieldLabel('Transform pipeline')
         # add all experiment modes in a dropdown list
         self.experimentModes = ['Experiment','TestVisualize','TestValidate']
@@ -660,13 +661,17 @@ class CoordTransformWidget(QtWidgets.QWidget):
         # Create editable fields for calibration parameters
         self.conf_top_x_mon_label = FieldLabel('Confocal top left pixel - x (monitor)')
         self.conf_top_x_mon_edit = LineEdit(str(0))
+        self.conf_top_x_mon_edit.setEditable(False)
         self.conf_top_left_mon_button = PushButton('Click detect: confocal top left pixel')
         self.conf_top_y_mon_label = FieldLabel('Confocal top left pixel - y (monitor)')
         self.conf_top_y_mon_edit = LineEdit(str(0))
+        self.conf_top_y_mon_edit.setEditable(False)
         self.conf_size_x_px_mon_label = FieldLabel('Confocal image size - x, monitor (pixels)')
         self.conf_size_x_px_mon_edit = LineEdit(str(0))
+        self.conf_size_x_px_mon_edit.setEditable(False)
         self.conf_size_y_px_mon_label = FieldLabel('Confocal image size - y, monitor (pixels)')
         self.conf_size_y_px_mon_edit = LineEdit(str(0))
+        self.conf_size_y_px_mon_edit.setEditable(False)
         self.conf_bottom_right_mon_button = PushButton('Click detect: confocal bottom right pixel')
         # time sleeps and drag durations
         self.time_sleep_label = FieldLabel('Time sleeps (s)')
@@ -747,13 +752,16 @@ class CoordTransformWidget(QtWidgets.QWidget):
         topLeftPoint = QPoint(0,670)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
+        
+        self.__calibNameSuffix = '_transformParams.txt'
 
     def setCalibrationList(self, calibrationsDir):
         """ Set combobox with available coordinate transformations to use. """
         for transform in os.listdir(calibrationsDir):
             if os.path.isfile(os.path.join(calibrationsDir, transform)):
-                transform = transform.split('.')[0].split('_')[0]
-                self.transformCalibrations.append(transform)
+                if self.__calibNameSuffix in transform:
+                    transform = transform.split('.')[0].split('_')[0]
+                    self.transformCalibrations.append(transform)
         self.transformCalibrations = list(reversed(self.transformCalibrations))
         self.transformCalibrationsPar.addItems(self.transformCalibrations)
         self.transformCalibrationsPar.setCurrentIndex(0)

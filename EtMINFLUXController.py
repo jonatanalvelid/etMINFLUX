@@ -4,7 +4,6 @@ import sys
 import importlib
 import enum
 import warnings
-import threading
 import copy
 import time
 import math
@@ -38,10 +37,24 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget = widget
         
         print('Initializing etMINFLUX controller')
-
-        # set default data dir (CREATE THESE FOLDERS IF THEY DO NOT EXIST YET)
-        self._dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'data')
-        self._transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Documents\\Jonatan\\etminflux-files', 'recordings', 'transforms')
+        
+        ############# SYSTEM-SPECIFIC SETTINGS - MAKE SURE TO CHANGE THESE VARIABLES TO YOUR SYSTEM CONFIG #############
+        # list of minflux sequences that can be triggered (INPUT THE NAMES/IDS EXACTLY AS THEY ARE IN THE SEQUENCES)
+        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D']  # make sure that these options matches exactly those in Imspector
+        # default data and transformations dirs (CREATE THESE FOLDERS IF THEY DO NOT EXIST YET, AND CHANGE THESE PATHS TO THAT OF YOUR SYSTEM)
+        self._dataDir = os.path.join('C:\\Users\\defaultusername\\Documents\\etMINFLUX', 'data')
+        self._transformsDir = os.path.join('C:\\Users\\defaultusername\\Documents\\etMINFLUX', 'transforms')
+        # default screen position of Auto Repetition button in Imspector
+        self.set_repeat_meas_button_pos = [1328,72]
+        # default screen position of top MINFLUX dataset in Workspace widget in Imspector
+        self.set_topmfxdataset_button_pos = [2191,1228]
+        # list of available lasers for MFX imaging (get this list manually from Imspector control software)
+        self.mfxExcLaserList = ['MINFLUX 642', 'MINFLUX 560', 'MINFLUX 488']  # names for the lasers (only display names in etMINFLUX widget, the indexes below is key to selection in Imspector)
+        self.laser_exc_idxs = [6,3,1]  # corresponding list indexes for the above lasers in the laser list in the Channels widget in Imspector 
+        # name of the confocal configuration in the Imspector measurement to be used for the confocal timelapse imaging on which to run the real-time analysis pipeline
+        self.__conf_config = 'ov conf'
+        ################################################################################################################
+        
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
 
         # open imspector connection
@@ -68,12 +81,10 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setAnalysisPipelines(self.analysisDir)
         self._widget.setTransformations(self.transformDir)
 
-        # list of minflux sequences that can be triggered
-        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D', 'Tracking_2D_Fast', 'ja_seqTrk3D_Peroxisomes_HaloJF646', 'ja_seqTrk3D_dyn-SR', 'ja_seqTrk3D_gag-SRmemb', 'ja_triangle_dmp_lipids', 'ja_Trk2Dtriangle_dyn1etMINFLUX', 'ja_Trk2Dtriangle_cav1etMINFLUX', 'ak_hex_dmp1_100kHzbgc_13phtlim', 'ak_hex_dmp1_80kHzbgc_8phtlim', 'ak_hex_dmp1_100kHzbgc_12phtlim', 'ak_hex_dmp1_46kHzbgc_5phtlim', 'ak_hex_dmp1_60kHzbgc_8phtlim', 'ak_hex_dmp1_84kHzbgc_10phtlim', 'ak_hex_dmp1_50kHzbgc_6phtlim', 'ja_seqTrk3D_May2024-SR-40uW', 'ja_Trk2Dtriangle_confmfxoverlap']  # make sure that these options matches exactly those in Imspector
+        # set list of available MFX sequences in the widget
         self._widget.setMfxSequenceList(self.mfxSeqList)
 
-        # list of available lasers for MFX imaging, get this list manually from Imspector control software
-        self.mfxExcLaserList = ['640', '561', '488']
+        # set list of available lasers for MFX imaging, get this list manually from Imspector control software
         self._widget.setMinfluxExcLaserList(self.mfxExcLaserList)
 
         # create a helper controller for the coordinate transform pop-out widget
@@ -161,7 +172,6 @@ class EtMINFLUXController(QtCore.QObject):
         self.__plotROI = False
         self.__confocalFramePause = False
         self.__dualColor = False
-        self.__conf_config = 'ov conf'
         self.__img_ana = None
         self.__prev_event_coords_deque = deque(maxlen=100)
         self.__prevFrames = deque(maxlen=50)  # deque for previous fast frames
@@ -1226,19 +1236,18 @@ class EtMINFLUXController(QtCore.QObject):
 
     def setMFXLasers(self, exc_laser, exc_pwr, act_pwr):
         """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
-        laser_exc_idxs = [6,3,1]
         # set all excitation to 0 and off
-        for laser_exc_idx in laser_exc_idxs:
+        for laser_exc_idx in self.laser_exc_idxs:
             self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/active', specpy.ValueTree.Measurement).set(False)
             self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/power/calibrated', specpy.ValueTree.Measurement).set(0)
-        # set excitation
-        laser_exc_idx = str(laser_exc_idxs[self.mfxExcLaserList.index(exc_laser)])
+        # set excitation laser
+        laser_exc_idx = str(self.laser_exc_idxs[self.mfxExcLaserList.index(exc_laser)])
         laser_status_exc = True
         if exc_pwr == 0:
             exc_pwr = 0.1
         self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+laser_exc_idx+'/active', specpy.ValueTree.Measurement).set(laser_status_exc)
         self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+laser_exc_idx+'/power/calibrated', specpy.ValueTree.Measurement).set(exc_pwr)
-        # set activation
+        # set activation laser (405)
         laser_status_act = True if act_pwr > 0 else False
         self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
         self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
@@ -1483,11 +1492,9 @@ class EtCoordTransformHelper():
 
         self._widget.setCalibrationList(self.__saveFolder)
 
-        # initiate and set parameters for automatic mouse control
-        self._set_repeat_meas_button_pos = [1328,72]
-        self._widget.setRepeatMeasCalibrationButtonText(self._set_repeat_meas_button_pos)
-        self._set_topmfxdataset_button_pos = [2191,1228]
-        self._widget.setDeleteMFXDatasetButtonText(self._set_topmfxdataset_button_pos)
+        # set parameters for automatic mouse control
+        self._widget.setRepeatMeasCalibrationButtonText(self.etMINFLUXController.set_repeat_meas_button_pos)
+        self._widget.setDeleteMFXDatasetButtonText(self.etMINFLUXController.set_topmfxdataset_button_pos)
 
         self.calibrationLoad()
 
@@ -1558,9 +1565,12 @@ class EtCoordTransformHelper():
     def calibrationLoad(self):
         """ Load a previously saved transformation calibration. """
         calibNameIdx = self._widget.transformCalibrationsPar.currentIndex()
-        calibName = self._widget.transformCalibrations[calibNameIdx]
-        filename = os.path.join(self.__saveFolder, calibName) + self.__calibNameSuffix
-        params = np.loadtxt(fname=filename, dtype=float, delimiter='\t')
+        if calibNameIdx > -1:
+            calibName = self._widget.transformCalibrations[calibNameIdx]
+            filename = os.path.join(self.__saveFolder, calibName) + self.__calibNameSuffix
+            params = np.loadtxt(fname=filename, dtype=float, delimiter='\t')
+        else:
+            params = np.array([1.0000e2, 1.00002e2, 1.0000e2, 1.0000e2], dtype=float)  # default transform params, when folder is empty
         self._widget.conf_top_x_mon_edit.setText(str(int(params[0])))
         self._widget.conf_top_y_mon_edit.setText(str(int(params[1])))
         self._widget.conf_size_x_px_mon_edit.setText(str(int(params[2])))
