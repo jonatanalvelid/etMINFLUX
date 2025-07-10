@@ -45,9 +45,9 @@ class EtMINFLUXController(QtCore.QObject):
         self._dataDir = os.path.join('C:\\Users\\defaultusername\\Documents\\etMINFLUX', 'data')
         self._transformsDir = os.path.join('C:\\Users\\defaultusername\\Documents\\etMINFLUX', 'transforms')
         # default screen position of Auto Repetition button in Imspector
-        self.set_repeat_meas_button_pos = [1328,72]
+        self._set_repeat_meas_button_pos = [1328,72]
         # default screen position of top MINFLUX dataset in Workspace widget in Imspector
-        self.set_topmfxdataset_button_pos = [2191,1228]
+        self._set_topmfxdataset_button_pos = [2191,1228]
         # list of available lasers for MFX imaging (get this list manually from Imspector control software)
         self.mfxExcLaserList = ['MINFLUX 642', 'MINFLUX 560', 'MINFLUX 488']  # names for the lasers (only display names in etMINFLUX widget, the indexes below is key to selection in Imspector)
         self.laser_exc_idxs = [6,3,1]  # corresponding list indexes for the above lasers in the laser list in the Channels widget in Imspector 
@@ -1493,8 +1493,10 @@ class EtCoordTransformHelper():
         self._widget.setCalibrationList(self.__saveFolder)
 
         # set parameters for automatic mouse control
-        self._widget.setRepeatMeasCalibrationButtonText(self.etMINFLUXController.set_repeat_meas_button_pos)
-        self._widget.setDeleteMFXDatasetButtonText(self.etMINFLUXController.set_topmfxdataset_button_pos)
+        self._widget.setRepeatMeasCalibrationButtonText(self.etMINFLUXController._set_repeat_meas_button_pos)
+        self._widget.setDeleteMFXDatasetButtonText(self.etMINFLUXController._set_topmfxdataset_button_pos)
+        self._set_repeat_meas_button_pos = self.etMINFLUXController._set_repeat_meas_button_pos
+        self._set_topmfxdataset_button_pos = self.etMINFLUXController._set_topmfxdataset_button_pos
 
         self.calibrationLoad()
 
