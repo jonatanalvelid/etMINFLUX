@@ -40,19 +40,19 @@ class EtMINFLUXController(QtCore.QObject):
         
         ############# SYSTEM-SPECIFIC SETTINGS - MAKE SURE TO CHANGE THESE VARIABLES TO YOUR SYSTEM CONFIG #############
         # list of minflux sequences that can be triggered (INPUT THE NAMES/IDS EXACTLY AS THEY ARE IN THE SEQUENCES)
-        self.mfxSeqList = ['Imaging_2D', 'Imaging_3D', 'Tracking_2D']  # make sure that these options matches exactly those in Imspector
+        self.mfxSeqList = ['Tracking_2D_Fast']  # make sure that these options matches exactly those in Imspector
         # default data and transformations dirs (CREATE THESE FOLDERS IF THEY DO NOT EXIST YET, AND CHANGE THESE PATHS TO THAT OF YOUR SYSTEM)
-        self._dataDir = os.path.join('C:\\Users\\defaultusername\\Documents\\etMINFLUX', 'data')
-        self._transformsDir = os.path.join('C:\\Users\\defaultusername\\Documents\\etMINFLUX', 'transforms')
+        self._dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Desktop\\Jonatan\\etMINFLUX-data', 'data')
+        self._transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Desktop\\Jonatan\\etMINFLUX-data', 'transforms')
         # default screen position of Auto Repetition button in Imspector
-        self._set_repeat_meas_button_pos = [1328,72]
+        self._set_repeat_meas_button_pos = [1282,73]
         # default screen position of top MINFLUX dataset in Workspace widget in Imspector
-        self._set_topmfxdataset_button_pos = [2191,1228]
+        self._set_topmfxdataset_button_pos = [1709,1215]
         # list of available lasers for MFX imaging (get this list manually from Imspector control software)
-        self.mfxExcLaserList = ['MINFLUX 642', 'MINFLUX 560', 'MINFLUX 488']  # names for the lasers (only display names in etMINFLUX widget, the indexes below is key to selection in Imspector)
-        self.laser_exc_idxs = [6,3,1]  # corresponding list indexes for the above lasers in the laser list in the Channels widget in Imspector 
+        self.mfxExcLaserList = ['MINFLUX640', 'MINFLUX560']  # names for the lasers (only display names in etMINFLUX widget, the indexes below is key to selection in Imspector)
+        self.laser_exc_idxs = [3,2]  # corresponding list indexes for the above lasers in the laser list in the Channels widget in Imspector 
         # name of the confocal configuration in the Imspector measurement to be used for the confocal timelapse imaging on which to run the real-time analysis pipeline
-        self.__conf_config = 'ov conf'
+        self.__conf_config = 'confocal'
         ################################################################################################################
         
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
@@ -1214,7 +1214,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def setMFXSequence(self, mfx_seq):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
-        self._imspector.value_at('Minflux/sequence_id', specpy.ValueTree.Measurement).set(mfx_seq)
+        self._imspector.value_at('Minflux/threads/settings/0/seq', specpy.ValueTree.Measurement).set(mfx_seq)
 
     def setMFXDataTag(self, position, roi_size, roi_idx, cycle=None):
         """ Sets MINFLUX data tag, according to the event detection. """
@@ -1237,20 +1237,18 @@ class EtMINFLUXController(QtCore.QObject):
     def setMFXLasers(self, exc_laser, exc_pwr, act_pwr):
         """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
         # set all excitation to 0 and off
-        for laser_exc_idx in self.laser_exc_idxs:
-            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/active', specpy.ValueTree.Measurement).set(False)
-            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/power/calibrated', specpy.ValueTree.Measurement).set(0)
+        #for laser_exc_idx in self.laser_exc_idxs:
+        #    self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/active', specpy.ValueTree.Measurement).set(False)
+        #    self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/power/calibrated', specpy.ValueTree.Measurement).set(0)
         # set excitation laser
-        laser_exc_idx = str(self.laser_exc_idxs[self.mfxExcLaserList.index(exc_laser)])
-        laser_status_exc = True
-        if exc_pwr == 0:
-            exc_pwr = 0.1
-        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+laser_exc_idx+'/active', specpy.ValueTree.Measurement).set(laser_status_exc)
-        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+laser_exc_idx+'/power/calibrated', specpy.ValueTree.Measurement).set(exc_pwr)
+        #laser_exc_idx = str(self.laser_exc_idxs[self.mfxExcLaserList.index(exc_laser)])
+        #laser_status_exc = True
+        self._imspector.value_at('Minflux/threads/settings/0/exc', specpy.ValueTree.Measurement).set(exc_laser)
+        self._imspector.value_at('Minflux/threads/settings/0/exp', specpy.ValueTree.Measurement).set(exc_pwr)
         # set activation laser (405)
-        laser_status_act = True if act_pwr > 0 else False
-        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
-        self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
+        #laser_status_act = True if act_pwr > 0 else False
+        #self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
+        #self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
         
     def setMFXROI(self, position, ROI_size):
         """ Set the MINFLUX ROI by mouse control: drag ROI, and click "Set as MFX ROI"-button. Change button-click with mouse to shortcut click with keyboard emulation. """

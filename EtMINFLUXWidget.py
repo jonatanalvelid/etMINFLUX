@@ -100,16 +100,16 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.init_frames_edit = LineEdit(str(0))
         # create editable fields for MFX acquisition parameters
         self.size_x_label = FieldLabel('MFX ROI size X (µm)')
-        self.size_x_edit = LineEdit(str(2))
+        self.size_x_edit = LineEdit(str(1))
         self.size_y_label = FieldLabel('MFX ROI size Y (µm)')
-        self.size_y_edit = LineEdit(str(2))
+        self.size_y_edit = LineEdit(str(1))
         self.mfx_rectime_label = FieldLabel('MFX ROI rec time (s)')
-        self.mfx_rectime_edit = LineEdit(str(60))
+        self.mfx_rectime_edit = LineEdit(str(10))
         self.mfx_exc_laser_label = FieldLabel('MFX exc laser')
         self.mfx_exc_laser = list()
         self.mfx_exc_laser_par = ComboBox()
         self.mfx_exc_pwr_label = FieldLabel('MFX exc power (%)')
-        self.mfx_exc_pwr_edit = LineEdit(str(4))
+        self.mfx_exc_pwr_edit = LineEdit(str(0.04))
         self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
         self.mfx_act_pwr_edit = LineEdit(str(0))
         self.mfx_act_pwr_edit.setEditable(False)
@@ -425,7 +425,7 @@ class EventWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.intensity_graph, 0, 1)
 
         frame_gm = self.frameGeometry()
-        topLeftPoint = QPoint(0,970)
+        topLeftPoint = QPoint(0,700)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
         
@@ -532,7 +532,7 @@ class StackViewerWidget(QtWidgets.QWidget):
         self.imgVb.setAspectLocked(True)
         self.imgVb.invertY(True)
         self.imgVb.addItem(self.scatterPlot)
-        self.img.setLevels([0, 10])
+        self.img.setLevels([0, 100])
 
         # image min,max levels related widgets
         self.setLevelsButton = PushButton('Set levels')
@@ -540,7 +540,7 @@ class StackViewerWidget(QtWidgets.QWidget):
         self.levelMinEdit = LineEdit(str(0))
         self.levelMinEdit.setMaximumWidth(50)
         self.levelMaxLabel = FieldLabel('Level max')
-        self.levelMaxEdit = LineEdit(str(10))
+        self.levelMaxEdit = LineEdit(str(100))
         self.levelMaxEdit.setMaximumWidth(50)
 
         # Create layour and add widgets
