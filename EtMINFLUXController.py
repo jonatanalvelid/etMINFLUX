@@ -40,7 +40,7 @@ class EtMINFLUXController(QtCore.QObject):
         
         ############# SYSTEM-SPECIFIC SETTINGS - MAKE SURE TO CHANGE THESE VARIABLES TO YOUR SYSTEM CONFIG #############
         # list of minflux sequences that can be triggered (INPUT THE NAMES/IDS EXACTLY AS THEY ARE IN THE SEQUENCES)
-        self.mfxSeqList = ['Tracking_2D_Fast']  # make sure that these options matches exactly those in Imspector
+        self.mfxSeqList = ['Tracking_2D_Fast', 'ja_seqTrk3D_Dec2022-2Csearch-m2410base','ja_seqTrk3D_Dec2022-2Cspawn-m2410base', 'ja_seqTrk3D_Dec2022-m2410base', 'ja_Tracking_2D_Fast_Nov2024-m2410base', 'ja_Tracking_2D_Nov2024-2Csearch-m2410base', 'ja_Tracking_2D_Nov2024-2Cspawn-m2410base', 'ja_Tracking_2D_Nov2024-m2410base']  # make sure that these options matches exactly those in Imspector
         # default data and transformations dirs (CREATE THESE FOLDERS IF THEY DO NOT EXIST YET, AND CHANGE THESE PATHS TO THAT OF YOUR SYSTEM)
         self._dataDir = os.path.join('C:\\Users\\Abberior_Admin\\Desktop\\Jonatan\\etMINFLUX-data', 'data')
         self._transformsDir = os.path.join('C:\\Users\\Abberior_Admin\\Desktop\\Jonatan\\etMINFLUX-data', 'transforms')
@@ -50,6 +50,9 @@ class EtMINFLUXController(QtCore.QObject):
         self._set_topmfxdataset_button_pos = [1709,1215]
         # list of available lasers for MFX imaging (get this list manually from Imspector control software)
         self.mfxExcLaserList = ['MINFLUX640', 'MINFLUX560']  # names for the lasers (only display names in etMINFLUX widget, the indexes below is key to selection in Imspector)
+        self.mfxDetectorListView = ['DAPI', 'GFP', 'Cy3', 'Cy5 near', 'Cy5 far', 'Cy5 near & Cy5 far', 'Cy3 & Cy5 near', 'Cy3 & Cy5 far']
+        self.mfxDetectorList = ['DET1', 'DET2', 'DET3', 'DET4', 'DET5', '["DET4","DET5"]', '["DET3","DET4"]', '["DET3","DET5"]']  # DET1=DAPI, DET2=GFP, DET3=Cy3, DET4=Cy5 near, DET5=Cy5 far
+        self.mfxDetectorListThreads = ['["DET1"]', '["DET2"]', '["DET3"]', '["DET4"]', '["DET5"]', '["DET4","DET5"]', '["DET3","DET4"]', '["DET3","DET5"]']  # DET1=DAPI, DET2=GFP, DET3=Cy3, DET4=Cy5 near, DET5=Cy5 far
         self.laser_exc_idxs = [3,2]  # corresponding list indexes for the above lasers in the laser list in the Channels widget in Imspector 
         # name of the confocal configuration in the Imspector measurement to be used for the confocal timelapse imaging on which to run the real-time analysis pipeline
         self.__conf_config = 'confocal'
@@ -82,10 +85,14 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setTransformations(self.transformDir)
 
         # set list of available MFX sequences in the widget
-        self._widget.setMfxSequenceList(self.mfxSeqList)
+        self._widget.setMfxSequenceList(self.mfxSeqList, thread=0)
+        self._widget.setMfxSequenceList(self.mfxSeqList, thread=1)
 
         # set list of available lasers for MFX imaging, get this list manually from Imspector control software
-        self._widget.setMinfluxExcLaserList(self.mfxExcLaserList)
+        self._widget.setMinfluxExcLaserList(self.mfxExcLaserList, thread=0)
+        self._widget.setMinfluxExcLaserList(self.mfxExcLaserList, thread=1)
+        self._widget.setMinfluxDetectorList(self.mfxDetectorListView, thread=0)
+        self._widget.setMinfluxDetectorList(self.mfxDetectorListView, thread=1)
 
         # create a helper controller for the coordinate transform pop-out widget
         self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget, self._transformsDir)
@@ -104,6 +111,7 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.presetMfxRecTimeCheck.clicked.connect(self.togglePresetRecTime)
         self._widget.autoSaveCheck.clicked.connect(self.togglePresetAutoSave)
         self._widget.autoDeleteMFXDatasetCheck.clicked.connect(self.togglePresetAutoDeleteMFX)
+        self._widget.twoThreadsMFXCheck.clicked.connect(self.toggleTwoThreadMFX)
 
         self._widget.coordListWidget.delROIButton.clicked.connect(self.deleteROI)
         self._widget.followROIModeCheck.clicked.connect(self.toggleFollowingROI)
@@ -152,7 +160,6 @@ class EtMINFLUXController(QtCore.QObject):
         # get preset calibration values from calibration GUI
         self.getCalibrationValues()
 
-
     def initiateFlagsParams(self):
         # initiate flags and params
         self.__running = False  # run flag
@@ -172,6 +179,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__plotROI = False
         self.__confocalFramePause = False
         self.__dualColor = False
+        self.__mfx_twothreaded = False
         self.__img_ana = None
         self.__prev_event_coords_deque = deque(maxlen=100)
         self.__prevFrames = deque(maxlen=50)  # deque for previous fast frames
@@ -190,7 +198,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def initiatePlottingParams(self):
         self.__colors = deque(['g','g','g','g','g'])
-    
+
     def popColor(self):
         col = self.__colors.popleft()
         self.__colors.append(col)
@@ -213,12 +221,24 @@ class EtMINFLUXController(QtCore.QObject):
             # get timings from ROI input
             self.getCalibrationValues()
             # read mfx sequence and lasers and laser powers from GUI
-            sequenceIdx = self._widget.mfx_seq_par.currentIndex()
-            self.mfx_seq = self._widget.mfx_seqs[sequenceIdx]
-            laserIdx = self._widget.mfx_exc_laser_par.currentIndex()
-            self.mfx_exc_laser = self._widget.mfx_exc_lasers[laserIdx]
-            self.mfx_exc_pwr = float(self._widget.mfx_exc_pwr_edit.text())
-            self.mfx_act_pwr = float(self._widget.mfx_act_pwr_edit.text())
+            sequenceIdxth0 = self._widget.mfxth0_seq_par.currentIndex()
+            self.mfxth0_seq = self._widget.mfx_seqs[sequenceIdxth0]
+            laserIdxth0 = self._widget.mfxth0_exc_laser_par.currentIndex()
+            self.mfxth0_exc_laser = self._widget.mfx_exc_lasers[laserIdxth0]
+            self.mfxth0_exc_pwr = float(self._widget.mfxth0_exc_pwr_edit.text())
+            detectorIdxth0 = self._widget.mfxth0_detector_par.currentIndex()
+            self.mfxth0_detector = self.mfxDetectorListThreads[detectorIdxth0]
+            self.mfxch0_detector = self.mfxDetectorList[detectorIdxth0]
+            #self.mfxth0_act_pwr = float(self._widget.mfx_act_pwr_edit.text())
+            if self.__mfx_twothreaded:
+                sequenceIdxth1 = self._widget.mfxth1_seq_par.currentIndex()
+                self.mfxth1_seq = self._widget.mfx_seqs[sequenceIdxth1]
+                laserIdxth1 = self._widget.mfxth1_exc_laser_par.currentIndex()
+                self.mfxth1_exc_laser = self._widget.mfx_exc_lasers[laserIdxth1]
+                self.mfxth1_exc_pwr = float(self._widget.mfxth1_exc_pwr_edit.text())
+                detectorIdxth1 = self._widget.mfxth1_detector_par.currentIndex()
+                self.mfxth1_detector = self.mfxDetectorListThreads[detectorIdxth1]
+                self.mfxch1_detector = self.mfxDetectorList[detectorIdxth1]
 
             # read param for triggering random ROI from binary masks
             self.__random_roi_bin = self._widget.triggerRandomROICheck.isChecked()
@@ -1137,7 +1157,19 @@ class EtMINFLUXController(QtCore.QObject):
         """ Prepare a MINFLUX scan at the defined position. """
         self.setMFXROI(position, ROI_size)
         time.sleep(self._sleepTime)
-        self.setMFXSequence(self.mfx_seq)
+        # always remove threads down to a single thread
+        for _ in range(2):
+            self._imspector.value_at('Minflux/threads/rem', specpy.ValueTree.Measurement).trigger()
+            time.sleep(0.05)
+        if self.__mfx_twothreaded:
+            # if two-threaded minflux, prepare the minflux acquisition with an extra thread and the start condition for the second thread
+            self._imspector.value_at('Minflux/threads/add', specpy.ValueTree.Measurement).trigger()
+            time.sleep(0.05)
+            self._imspector.value_at('Minflux/threads/settings/1/sta', specpy.ValueTree.Measurement).set('on_thi0_vfn')
+        self.setMFXSequence(self.mfxth0_seq, thread=0)
+        if self.__mfx_twothreaded:
+            # if two-threaded minflux, set the second MFX sequence
+            self.setMFXSequence(self.mfxth1_seq, thread=1)
         if self.__followingROI:
             if self.__followingROIMode == ROIFollowMode.Single or self.__followingROIMode == ROIFollowMode.SingleRedetect:
                 # parameter save current parameters, to reuse for later rounds
@@ -1162,7 +1194,31 @@ class EtMINFLUXController(QtCore.QObject):
             self.setMFXDataTag(pos_conf, ROI_size_um, self.__roiFollowMultipleCurrIdx, self.__roiFollowCurrCycle)
         else:
             self.setMFXDataTag(pos_conf, ROI_size_um, self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
-        self.setMFXLasers(self.mfx_exc_laser, self.mfx_exc_pwr, self.mfx_act_pwr)
+        self.setMFXLasers(self.mfxth0_exc_laser, self.mfxth0_exc_pwr, thread=0)  #, self.mfx_act_pwr)
+        channelDetectors = []
+        if len(self.mfxch0_detector) > 4:
+            channelDetectors.append(self.mfxch0_detector.split('"')[1])
+            channelDetectors.append(self.mfxch0_detector.split('"')[3])
+        else:
+            channelDetectors.append(self.mfxch0_detector)
+        if self.__mfx_twothreaded:
+            if len(self.mfxch1_detector) > 4:
+                channelDetectors.append(self.mfxch1_detector.split('"')[1])
+                channelDetectors.append(self.mfxch1_detector.split('"')[3])
+            else:
+                channelDetectors.append(self.mfxch1_detector)
+            channelDetectors = (np.unique(channelDetectors)).tolist()
+        elif len(channelDetectors)==1:
+            if self.mfxch0_detector != self.mfxDetectorList[0]:
+                channelDetectors.append(self.mfxDetectorList[0])
+            else:
+                channelDetectors.append(self.mfxDetectorList[1])
+        self.setMFXDetectorsChannels(channelDetectors)
+        self.setMFXDetectors(self.mfxth0_detector, thread=0)
+        if self.__mfx_twothreaded:
+            # if two-threaded minflux, set second thread minflux laser
+            self.setMFXLasers(self.mfxth1_exc_laser, self.mfxth1_exc_pwr, thread=1)
+            self.setMFXDetectors(self.mfxth1_detector, thread=1)
         time.sleep(self._sleepTime)
 
     def startRecTimer(self, deadtime=True, time=None):
@@ -1212,9 +1268,9 @@ class EtMINFLUXController(QtCore.QObject):
         self.__confocalLinesFrame = y_pixels - 5
         return [x_roisize, y_roisize, x_pixels, y_pixels]
 
-    def setMFXSequence(self, mfx_seq):
+    def setMFXSequence(self, mfx_seq, thread=0):
         """ Sets MINFLUX sequence, according to the GUI choice of the user. """
-        self._imspector.value_at('Minflux/threads/settings/0/seq', specpy.ValueTree.Measurement).set(mfx_seq)
+        self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/seq', specpy.ValueTree.Measurement).set(mfx_seq)
 
     def setMFXDataTag(self, position, roi_size, roi_idx, cycle=None):
         """ Sets MINFLUX data tag, according to the event detection. """
@@ -1234,22 +1290,25 @@ class EtMINFLUXController(QtCore.QObject):
             rec_time_int = int(self.__rec_time_scan)
         self._imspector.value_at('Minflux/flow/stop_time', specpy.ValueTree.Measurement).set(rec_time_int)
 
-    def setMFXLasers(self, exc_laser, exc_pwr, act_pwr):
+    def setMFXLasers(self, exc_laser, exc_pwr, thread=0):  #, act_pwr):
         """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
-        # set all excitation to 0 and off
-        #for laser_exc_idx in self.laser_exc_idxs:
-        #    self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/active', specpy.ValueTree.Measurement).set(False)
-        #    self._imspector.value_at('ExpControl/measurement/channels/0/lasers/'+str(laser_exc_idx)+'/power/calibrated', specpy.ValueTree.Measurement).set(0)
-        # set excitation laser
-        #laser_exc_idx = str(self.laser_exc_idxs[self.mfxExcLaserList.index(exc_laser)])
-        #laser_status_exc = True
-        self._imspector.value_at('Minflux/threads/settings/0/exc', specpy.ValueTree.Measurement).set(exc_laser)
-        self._imspector.value_at('Minflux/threads/settings/0/exp', specpy.ValueTree.Measurement).set(exc_pwr)
+        self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/exc', specpy.ValueTree.Measurement).set(exc_laser)
+        self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/exp', specpy.ValueTree.Measurement).set(exc_pwr)
         # set activation laser (405)
         #laser_status_act = True if act_pwr > 0 else False
         #self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
         #self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
-        
+
+    def setMFXDetectorsChannels(self, detectors):
+        """ Sets available MINFLUX detectors in the channels, according to the GUI choice of the user. """
+        self._imspector.value_at('ExpControl/measurement/channels/0/detsel/detector', specpy.ValueTree.Measurement).set(detectors[0])
+        self._imspector.value_at('ExpControl/measurement/channels/1/detsel/detector', specpy.ValueTree.Measurement).set(detectors[1])
+
+    def setMFXDetectors(self, detector, thread=0):  #, act_pwr):
+        """ Sets MINFLUX detector(s), according to the GUI choice of the user. """
+        print([thread, detector])
+        self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/det', specpy.ValueTree.Measurement).set(detector)
+
     def setMFXROI(self, position, ROI_size):
         """ Set the MINFLUX ROI by mouse control: drag ROI, and click "Set as MFX ROI"-button. Change button-click with mouse to shortcut click with keyboard emulation. """
         # get monitor px position
@@ -1337,6 +1396,42 @@ class EtMINFLUXController(QtCore.QObject):
             self._widget.size_y_edit.setEditable(True)
             self.__presetROISize = True
 
+    def toggleTwoThreadMFX(self):
+        if not self._widget.twoThreadsMFXCheck.isChecked():
+            self._widget.mfxth1_seq_par.setEnabled(False)
+            self._widget.mfxth1_exc_laser_par.setEnabled(False)
+            self._widget.mfxth1_exc_pwr_edit.setEditable(False)
+            self._widget.mfxth1_detector_par.setEnabled(False)
+            self._widget.mfxth0_seq_label.setText('MFX sequence')
+            self._widget.mfxth0_exc_laser_label.setText('MFX exc laser')
+            self._widget.mfxth0_exc_pwr_label.setText('MFX exc power (%)')
+            self._widget.mfxth0_detector_label.setText('MFX detector(s)')
+            self._widget.mfxth1_seq_label.setStyleSheet('color: rgb(83,83,83);')
+            self._widget.mfxth1_exc_laser_label.setStyleSheet('color: rgb(83,83,83);')
+            self._widget.mfxth1_exc_pwr_label.setStyleSheet('color: rgb(83,83,83);')
+            self._widget.mfxth1_detector_label.setStyleSheet('color: rgb(83,83,83);')
+            self._widget.mfxth1_seq_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self._widget.mfxth1_exc_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self._widget.mfxth1_detector_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self.__mfx_twothreaded = False
+        else:
+            self._widget.mfxth1_seq_par.setEnabled(True)
+            self._widget.mfxth1_exc_laser_par.setEnabled(True)
+            self._widget.mfxth1_exc_pwr_edit.setEditable(True)
+            self._widget.mfxth1_detector_par.setEnabled(True)
+            self._widget.mfxth0_seq_label.setText('MFX (th0) sequence')
+            self._widget.mfxth0_exc_laser_label.setText('MFX (th0) exc laser')
+            self._widget.mfxth0_exc_pwr_label.setText('MFX (th0) exc power (%)')
+            self._widget.mfxth0_detector_label.setText('MFX (th0) detector(s)')
+            self._widget.mfxth1_seq_label.setStyleSheet('color: rgb(217,83,0);')
+            self._widget.mfxth1_exc_laser_label.setStyleSheet('color: rgb(217,83,0);')
+            self._widget.mfxth1_exc_pwr_label.setStyleSheet('color: rgb(217,83,0);')
+            self._widget.mfxth1_detector_label.setStyleSheet('color: rgb(217,83,0);')
+            self._widget.mfxth1_seq_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(170,170,170); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self._widget.mfxth1_exc_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(170,170,170); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self._widget.mfxth1_detector_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(170,170,170); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self.__mfx_twothreaded = True
+
     def toggleConfocalFramePause(self):
         if not self._widget.confocalFramePauseCheck.isChecked():
             self._widget.conf_frame_pause_edit.setEditable(False)
@@ -1384,7 +1479,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def getTransformCoeffs(self):
         return self.__transformCoeffs
-    
+
     def getPresetRoiSize(self, length):
         roi_sizes = []
         for _ in range(length):

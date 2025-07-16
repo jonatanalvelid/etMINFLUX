@@ -84,6 +84,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.plotROICheck = CheckBox('Plot ROI (experiment mode)')
         # create check box for confocal monitoring pausing between frames
         self.confocalFramePauseCheck = CheckBox('Confocal frame pause (s)')
+        # create check box for using two-threaded MINFLUX recording
+        self.twoThreadsMFXCheck = CheckBox('Two-threaded MINFLUX')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = FieldLabel('Bin. pos. threshold (cnts)')
         self.bin_thresh_edit = LineEdit(str(10))
@@ -105,17 +107,42 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.size_y_edit = LineEdit(str(1))
         self.mfx_rectime_label = FieldLabel('MFX ROI rec time (s)')
         self.mfx_rectime_edit = LineEdit(str(10))
-        self.mfx_exc_laser_label = FieldLabel('MFX exc laser')
-        self.mfx_exc_laser = list()
-        self.mfx_exc_laser_par = ComboBox()
-        self.mfx_exc_pwr_label = FieldLabel('MFX exc power (%)')
-        self.mfx_exc_pwr_edit = LineEdit(str(0.04))
-        self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
-        self.mfx_act_pwr_edit = LineEdit(str(0))
-        self.mfx_act_pwr_edit.setEditable(False)
-        self.mfx_seq_label = FieldLabel('MFX sequence')
-        self.mfx_seq = list()
-        self.mfx_seq_par = ComboBox()
+        self.mfxth0_exc_laser_label = FieldLabel('MFX exc laser')
+        self.mfxth0_exc_laser = list()
+        self.mfxth0_exc_laser_par = ComboBox()
+        self.mfxth0_exc_pwr_label = FieldLabel('MFX exc power (%)')
+        self.mfxth0_exc_pwr_edit = LineEdit(str(0.04))
+        self.mfxth1_exc_laser_label = FieldLabel('MFX (th1) exc laser')
+        self.mfxth1_exc_laser = list()
+        self.mfxth1_exc_laser_par = ComboBox()
+        self.mfxth1_exc_laser_par.setEnabled(False)
+        self.mfxth1_exc_pwr_label = FieldLabel('MFX (th1) exc power (%)')
+        self.mfxth1_exc_pwr_edit = LineEdit(str(0.04))
+        self.mfxth1_exc_pwr_edit.setEditable(False)
+        self.mfxth0_detector_label = FieldLabel('MFX detector(s)')
+        self.mfxth0_detector = list()
+        self.mfxth0_detector_par = ComboBox()
+        self.mfxth1_detector_label = FieldLabel('MFX (th1) detector(s)')
+        self.mfxth1_detector = list()
+        self.mfxth1_detector_par = ComboBox()
+        #self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
+        #self.mfx_act_pwr_edit = LineEdit(str(0))
+        #self.mfx_act_pwr_edit.setEditable(False)
+        self.mfxth0_seq_label = FieldLabel('MFX sequence')
+        self.mfxth0_seq = list()
+        self.mfxth0_seq_par = ComboBox()
+        self.mfxth1_seq_label = FieldLabel('MFX (th1) sequence')
+        self.mfxth1_seq = list()
+        self.mfxth1_seq_par = ComboBox()
+        # disable th1 fields by default
+        self.mfxth1_seq_par.setEnabled(False)
+        self.mfxth1_seq_label.setStyleSheet('color: rgb(83,83,83);')
+        self.mfxth1_exc_laser_label.setStyleSheet('color: rgb(83,83,83);')
+        self.mfxth1_exc_pwr_label.setStyleSheet('color: rgb(83,83,83);')
+        self.mfxth1_detector_label.setStyleSheet('color: rgb(83,83,83);')
+        self.mfxth1_seq_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+        self.mfxth1_exc_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+        self.mfxth1_detector_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         # create editable fields for analysis control parameters
         self.lines_analysis_label = FieldLabel('Analysis period (lines)')
         self.lines_analysis_edit = LineEdit(str(100))
@@ -194,17 +221,33 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.minflux_title, currentRow, 2, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.mfx_seq_label, currentRow, 2)
-        self.grid.addWidget(self.mfx_seq_par, currentRow, 3)
+        self.grid.addWidget(self.mfxth0_seq_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth0_seq_par, currentRow, 3)
+        self.grid.addWidget(self.twoThreadsMFXCheck, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.mfx_exc_laser_label, currentRow, 2)
-        self.grid.addWidget(self.mfx_exc_laser_par, currentRow, 3)
+        self.grid.addWidget(self.mfxth0_exc_laser_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth0_exc_laser_par, currentRow, 3)
         currentRow += 1
-        self.grid.addWidget(self.mfx_exc_pwr_label, currentRow, 2)
-        self.grid.addWidget(self.mfx_exc_pwr_edit, currentRow, 3)
+        self.grid.addWidget(self.mfxth0_exc_pwr_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth0_exc_pwr_edit, currentRow, 3)
         currentRow += 1
-        self.grid.addWidget(self.mfx_act_pwr_label, currentRow, 2)
-        self.grid.addWidget(self.mfx_act_pwr_edit, currentRow, 3)
+        self.grid.addWidget(self.mfxth0_detector_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth0_detector_par, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.mfxth1_seq_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth1_seq_par, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.mfxth1_exc_laser_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth1_exc_laser_par, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.mfxth1_exc_pwr_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth1_exc_pwr_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.mfxth1_detector_label, currentRow, 2)
+        self.grid.addWidget(self.mfxth1_detector_par, currentRow, 3)
+        #currentRow += 1
+        #self.grid.addWidget(self.mfx_act_pwr_label, currentRow, 2)
+        #self.grid.addWidget(self.mfx_act_pwr_edit, currentRow, 3)
         self.grid.addWidget(self.triggerRandomROICheck, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.size_x_label, currentRow, 2)
@@ -309,17 +352,35 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.transformPipelinePar.addItems(self.transformPipelines)
         self.transformPipelinePar.setCurrentIndex(0)
 
-    def setMfxSequenceList(self, mfxSeqs):
+    def setMfxSequenceList(self, mfxSeqs, thread=0):
         """ Set combobox with available minflux sequences to use. """
         self.mfx_seqs = mfxSeqs
-        self.mfx_seq_par.addItems(self.mfx_seqs)
-        self.mfx_seq_par.setCurrentIndex(0)
+        if thread == 0:
+            self.mfxth0_seq_par.addItems(self.mfx_seqs)
+            self.mfxth0_seq_par.setCurrentIndex(0)
+        elif thread == 1:
+            self.mfxth1_seq_par.addItems(self.mfx_seqs)
+            self.mfxth1_seq_par.setCurrentIndex(0)
 
-    def setMinfluxExcLaserList(self, excLasers):
+    def setMinfluxExcLaserList(self, excLasers, thread=0):
         """ Set combobox with available excitation lasers to use. """
         self.mfx_exc_lasers = excLasers
-        self.mfx_exc_laser_par.addItems(self.mfx_exc_lasers)
-        self.mfx_exc_laser_par.setCurrentIndex(0)
+        if thread == 0:
+            self.mfxth0_exc_laser_par.addItems(self.mfx_exc_lasers)
+            self.mfxth0_exc_laser_par.setCurrentIndex(0)
+        elif thread == 1:
+            self.mfxth1_exc_laser_par.addItems(self.mfx_exc_lasers)
+            self.mfxth1_exc_laser_par.setCurrentIndex(1)
+
+    def setMinfluxDetectorList(self, detectors, thread=0):
+        """ Set combobox with available excitation lasers to use. """
+        self.mfx_detectors = detectors
+        if thread == 0:
+            self.mfxth0_detector_par.addItems(self.mfx_detectors)
+            self.mfxth0_detector_par.setCurrentIndex(0)
+        elif thread == 1:
+            self.mfxth1_detector_par.addItems(self.mfx_detectors)
+            self.mfxth1_detector_par.setCurrentIndex(1)
     
     def setConfGUINullMessages(self):
         self.conf_guipausetimer_edit.setText(self.conf_guipausetimer_edit_nullmessage)
