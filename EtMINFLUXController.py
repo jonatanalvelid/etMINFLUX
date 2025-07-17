@@ -179,6 +179,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__plotROI = False
         self.__confocalFramePause = False
         self.__dualColor = False
+        self.__tripleColor = False
         self.__mfx_twothreaded = False
         self.__img_ana = None
         self.__prev_event_coords_deque = deque(maxlen=100)
@@ -188,7 +189,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__binary_frames = 2  # number of frames to use for calculating binary mask 
         self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
-        self.__params_exclude = ['img', 'img_ch2', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
+        self.__params_exclude = ['img', 'img_ch2', 'img_ch3', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
         self.__rec_time_deadtime = 3  # deadtime when starting MINFLUX recordings, in s
         self.__min_dist_prev_event = 7  # minimum accepted distance to a previous event during the same recording (i.e. a run in endless mode etc)
 
@@ -548,10 +549,12 @@ class EtMINFLUXController(QtCore.QObject):
         self.pipeline = getattr(importlib.import_module(f'{pipelinename}'), f'{pipelinename}')
         self.__pipeline_params = signature(self.pipeline).parameters
         self._widget.initParamFields(self.__pipeline_params, self.__params_exclude)
-        if 'dualcolor' in pipelinename:
+        self.__dualColor = False
+        self.__tripleColor = False
+        if 'triplecolor' in pipelinename:
+            self.__tripleColor = True
+        elif 'dualcolor' in pipelinename:
             self.__dualColor = True
-        else:
-            self.__dualColor = False
 
     def initiateBinaryMask(self):
         """ Initiate the process of calculating a binary mask of the region of interest. """
@@ -722,6 +725,23 @@ class EtMINFLUXController(QtCore.QObject):
                             break
                     except:
                         pass
+            elif self.__tripleColor:
+                # if triple color confocal scan - find ch2 and ch3 in imspector measurement data stacks (same size as ch1)
+                channel_counter = 1
+                ch1_sh = np.shape(self.img)
+                for i in range(1,10):
+                    try:
+                        img = np.squeeze(meas.stack(i).data()[0])
+                        if np.shape(img) == ch1_sh:
+                            if channel_counter == 1:
+                                self.img_ch2 = img
+                            elif channel_counter == 2:
+                                self.img_ch3 = img
+                            channel_counter += 1
+                            if channel_counter == 3:
+                                break
+                    except:
+                        pass
             # if recording mode is following ROI and we are currently following a ROI
             if self.__followingROIContinue:
                 analysisSuccess = True
@@ -804,7 +824,11 @@ class EtMINFLUXController(QtCore.QObject):
         self.__pipeline_start_file_prefix = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
         # run pipeline
         self.__pipeline_start_time = time.perf_counter()
-        if self.__dualColor:
+        if self.__tripleColor:
+            coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.img_ch2, self.img_ch3, self.__prevFrames, self.__binary_mask,
+                                                                        self.__exinfo, self.__presetROISize,
+                                                                        *self.__pipeline_param_vals)
+        elif self.__dualColor:
             coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.img_ch2, self.__prevFrames, self.__binary_mask,
                                                                         self.__exinfo, self.__presetROISize,
                                                                         *self.__pipeline_param_vals)
