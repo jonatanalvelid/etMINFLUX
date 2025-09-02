@@ -114,7 +114,7 @@ The analysis pipelines provided here are a set of pipelines that were developed 
 
 ## Publications
 The etMINFLUX codebase is used in the following publications:
-- Alvelid, Koerfer, Eggeling 2025, "Event-triggered MINFLUX microscopy: smart microscopy to catch and follow rare events", manuscript (bioRxiv: )
+- Alvelid, Koerfer, Eggeling 2025, "Event-triggered MINFLUX microscopy: smart microscopy to catch and follow rare events", preprint (bioRxiv: https://doi.org/10.1101/2025.08.27.672674)
 
 ## Contact
 If you have any questions about the repository, code, want to use it for your own experiments, or anything else, do not hesitate to contact Jonatan Alvelid on GitHub, BlueSky (@jonatanalvelid.bsky.social), by email (jonatan.alvelid(at)scilifelab.se), or open an issue in the repository.
