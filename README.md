@@ -1,10 +1,12 @@
 # etMINFLUX
-Event-triggered MINFLUX controller, written to interact with the abberior Imspector software, in turn controlling a MINFLUX microscope also capable of running confocal imaging. 
+Event-triggered MINFLUX controller, written to interact with the abberior Imspector software, in turn controlling an Abberior MINFLUX microscope also capable of running confocal imaging. 
 
 ## Installation instructions
-No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run.
+No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run. 
 
-The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10 and Imspector v16.3.15645, and has the following dependencies:
+The widget controls a commercial Abberior MINFLUX microscope, and thus requires such a system to function.
+
+The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10 and Imspector v16.3.15645 on Windows 10, and has the following dependencies:
 - specpy (https://pypi.org/project/specpy/, v1.2.3 used during development (works with Python 3.10); v1.2.1 available via pip works with Python 3.6 and has not been tested. See below for more info on specpy version.)
 You can simply import it or use the wheel to install it into your python env.)
 - qtpy (https://pypi.org/project/QtPy/)
@@ -16,7 +18,7 @@ You can simply import it or use the wheel to install it into your python env.)
 - scipy
 - pynput (https://pypi.org/project/pynput/)
 - mouse (https://pypi.org/project/mouse/)
-  
+
 Individual implemented pipelines have among the following dependencies:
 - pandas
 - scikit-image
@@ -27,24 +29,25 @@ Individual implemented pipelines have among the following dependencies:
 To setup the python evniroment needed to run the etMINFLUX software, follow the following instructions.
 - Install a virtual environment using the provided etminflux.yml or requirements.txt files in this repository. Conda has been used during development and was used to export these files.
 - Additionally, in the new environment, install specpy v1.2.3 (or any matched specpy version for your version of Imspector, where >1.2.3 should work). An installation wheel file can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers). Copy the wheel file to your cloned repository, change folder to your repository in the command line, and install it using pip: pip install specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers).
+- Total installation time on a MINFLUX control computer should be on the order of a few minutes.
   
-In order to run event-triggered recordings, some settings need to be adjusted in Imspector.
+In order to run event-triggered recordings, some settings need to be adjusted in Imspector (<5 min).
+- Start Imspector.
 - A keyboard shortcut for setting a marked region as a MINFLUX ROI has to be created, which the code will use by simulating keyboard input. The shortcut should be set to Ctrl+Shift+Alt+m. This has to be done once and will be saved as long as Imspector settings are not reset. If this shortcut is already in use for something else, select another shortcut and adjust the code accordingly; find the relevant code in EtMINFLUXController, line 1312-1320.
 - The IDs/names of the MINFLUX sequences to be triggered has to be added (replacing) in the list on line 43 in EtMINFLUXController.py.
 - If other MINFLUX lasers than the default ones should be used, or if the laser list indexes are different than the default ones (MINFLUX 488, MINFLUX 560, MINFLUX 642 options, for lasers called MINFLUX 488, MINFLUX 560 and MINFLUX 642 in Imspector; 488 = idx 1 (zero-indexing), 560 = idx 3, 642 = idx 6), the lists of laser names (only for display in etMINFLUX) and corresponding list indexes in the Channels widget in Imspector (important for correct automatic selection and power setting) should be adjusted in lines 52 and 53 in EtMINFLUXController.py.
 - Create empty folders dataDir and transformsDir, for data saving and calibration files, and update these folders on line 45-46 in EtMINFLUXController.py (recommended: in User\Documents).
-- Start Imspector.
 - If the specpy package does not find a connection with an open Imspector version, a mock Imspector class will be run that allows testing of the GUI.
 - Crete a template for etMINFLUX, and it is recommended to always use the sample template to avoid missing some settings. In this template, have one configuration (as can be seen in the Imspector Configurations widget) and connected measurement window where your confocal images to detect events in will be recorded. The configuration name has to match a setting in the etMINFLUX code, line 55 in EtMINFLUXController.py. The default name is "ov conf". If your confocal configuration has a different name, either rename it to ov conf, or adjust the name in the etMINFLUX code to match the current configuration name.
 
-Additionally, small adjustments have to be made in the etMINFLUX software to calibrate it to the current running system. Some GUI calibration has to be performed in order for the software to be able to simulate mouse click and drags for the functions that are missing in the specpy API. Important: while running an experiment, as simulated mouse movements are used to mark and set a MINFLUX ROI and start a measurement, moving the Imspector window, rearranging the measurement window in Imspector or moving the mouse during these occasions may result in failure of the experiments (clicks and drags will not happen where they are supposed to happen). 
+Additionally, small adjustments have to be made in the etMINFLUX software to calibrate it to the current running system (<1 min). Some GUI calibration has to be performed in order for the software to be able to simulate mouse click and drags for the functions that are missing in the specpy API. Important: while running an experiment, as simulated mouse movements are used to mark and set a MINFLUX ROI and start a measurement, moving the Imspector window, rearranging the measurement window in Imspector or moving the mouse during these occasions may result in failure of the experiments (clicks and drags will not happen where they are supposed to happen). 
 - Run the etMINFLUX software by running \_\_main\_\_.py in this folder.
 - In the widget that shows, press the Transform calibration button. In the new pop-out widget that shows up, the last saved calibration is automatically loaded. If calibration has to be performed, do the following:
   - (1) click "Click detect: confocal top left pixel button" and then click the top left pixel in your confocal image window used for event detection in Imspector. Do the same for "Click detect: confocal bottom right pixel". The corresponding values to the left in the pop-out widget will change to the pixels you clicked.
   - (2) Save calibration to be able to use the same next time you open the software.
   - (3) Press "Rep. meas. calib." button, and then click the Auto Repetition button in Imspector (looping measurement scan). The default value can be adjusted on line 48 in EtMINFLUXController.
   - (4) Press "Top MFX dataset" button, and then click the line where the top MINFLUX dataset would show up in the Workspace widget in Imspector. The default value can be adjusted on line 50 in EtMINFLUXController.
-- Remaining calibration fields (Timing and Distances) are not necessary to change, but can be adjusted upon user disgressiom. Timing fields control the time in seconds of different sleep events that take place during etMINFLUX experiments in order to ensure that the simulated mouse and keyboard events are consistent. Lowering the values to save a few seconds during measurements might be possible depending on the specs of the PC used to control the microscope.
+- Remaining calibration fields (Timing and Distances) are not necessary to change, but can be adjusted upon user disgression. Timing fields control the time in seconds of different sleep events that take place during etMINFLUX experiments in order to ensure that the simulated mouse and keyboard events are consistent. Lowering the values to save a few seconds during measurements might be possible depending on the specs of the PC used to control the microscope (default values are tested to be valid on Abberior MINFLUX control computers).
 - The save directory should be set using the option under the Saving title in the calibration pop-out widget. Here, all files will be saved after an etMINFLUX recording has finished.
 
 ## Setup etMINFLUX experiment settings
@@ -86,7 +89,7 @@ Before starting an etMINFLUX experiment, all acquisition settings pertaining to 
   - If a binary mask has been used, and no longer should be used, use the Reset binary mask button. A new mask or resetting of the current mask is required when changing the confocal image size in pixels.
 
 ## Run an etMINFLUX experiment
-After all the settings listed above have been set to the liking of the user, the experiment phase can begin.
+After all the settings listed above have been set to the liking of the user, the experiment phase can begin. An experiment will run for as long as the user defines the experiment, but can last between <10 s up to hours, depending on the application.
 - Setup the type of confocal recording you want to perform in a measurement in Imspector, including scanning parameters, lasers, etc. Make sure to not move the actual measurement window after having performed the calibration described above. If so, recalibrate the position of the measurement window. Also ensure that the confocal measurement configuration is called the same as in the etMINFLUX code (see instructions above for how to set this up). 
 - Ensure that the Experiment mode dropdown menu is set to Experiment.
 - Choose to check the Endless checkbox if you want the experiment to run indefinitely, continuously finding new events after the previous one has finished recording and been saved. 
