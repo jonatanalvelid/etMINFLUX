@@ -77,9 +77,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.triggerRandomROICheck = CheckBox('Random ROI (bin)')
         # create check box for automatic saving
         self.autoSaveCheck = CheckBox('Auto-save .msr after event')
-        self.autoSaveCheck.setChecked(True)
+        self.autoSaveCheck.setChecked(False)
         self.autoDeleteMFXDatasetCheck = CheckBox('Auto-delete mfx data after save')
-        self.autoDeleteMFXDatasetCheck.setChecked(True)
+        self.autoDeleteMFXDatasetCheck.setChecked(False)
         # create check box for plotting ROI even in experiment mode
         self.plotROICheck = CheckBox('Plot ROI (experiment mode)')
         # create check box for confocal monitoring pausing between frames
@@ -111,7 +111,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfxth0_exc_laser = list()
         self.mfxth0_exc_laser_par = ComboBox()
         self.mfxth0_exc_pwr_label = FieldLabel('MFX exc power (%)')
-        self.mfxth0_exc_pwr_edit = LineEdit(str(0.04))
+        self.mfxth0_exc_pwr_edit = LineEdit(str(4))
         self.mfxth1_exc_laser_label = FieldLabel('MFX (th1) exc laser')
         self.mfxth1_exc_laser = list()
         self.mfxth1_exc_laser_par = ComboBox()
@@ -706,41 +706,16 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.setStyleSheet('background-color: rgb(70,70,70);')
 
         # create buttons
-        self.saveCalibButton = PushButton('Save calibration')
-        self.loadCalibButton = PushButton('Load calibration')
-        self.setRepeatMeasCalibrationButton = PushButton('Rep. meas. calib.')
         self.setDeleteMFXDatasetButton = PushButton('Top MFX dataset')
         self.setSaveDirButton = PushButton('Choose save directory')
         self.save_dir_edit = LineEdit('Default data folder')
         self.save_dir_edit.setEditable(False)
 
-        # add all previous transforms in folder to be loaded
-        self.transformCalibrations = list()
-        self.transformCalibrationsPar = ComboBox()
-        self.transformCalibrationsPar_label = FieldLabel('Transform calibration')
-
-        # Create editable fields for calibration parameters
-        self.conf_top_x_mon_label = FieldLabel('Confocal top left pixel - x (monitor)')
-        self.conf_top_x_mon_edit = LineEdit(str(0))
-        self.conf_top_x_mon_edit.setEditable(False)
-        self.conf_top_left_mon_button = PushButton('Click detect: confocal top left pixel')
-        self.conf_top_y_mon_label = FieldLabel('Confocal top left pixel - y (monitor)')
-        self.conf_top_y_mon_edit = LineEdit(str(0))
-        self.conf_top_y_mon_edit.setEditable(False)
-        self.conf_size_x_px_mon_label = FieldLabel('Confocal image size - x, monitor (pixels)')
-        self.conf_size_x_px_mon_edit = LineEdit(str(0))
-        self.conf_size_x_px_mon_edit.setEditable(False)
-        self.conf_size_y_px_mon_label = FieldLabel('Confocal image size - y, monitor (pixels)')
-        self.conf_size_y_px_mon_edit = LineEdit(str(0))
-        self.conf_size_y_px_mon_edit.setEditable(False)
-        self.conf_bottom_right_mon_button = PushButton('Click detect: confocal bottom right pixel')
         # time sleeps and drag durations
         self.time_sleep_label = FieldLabel('Time sleeps (s)')
         self.time_sleep_edit = LineEdit(str(0.3))
         self.time_sleep_roiswitch_label = FieldLabel('Time sleeps - ROI switch (s)')
         self.time_sleep_roiswitch_edit = LineEdit(str(1))
-        self.drag_dur_label = FieldLabel('Drag duration (s)')
-        self.drag_dur_edit = LineEdit(str(0.15))
         self.save_time_label = FieldLabel('Save time (s)')
         self.save_time_edit = LineEdit(str(3))
         self.min_dist_prev_event_label = FieldLabel('Min distance to previous events (px)')
@@ -748,7 +723,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
 
         # Create titles
         self.gui_calibration_title = TitleLabel('GUI calibration')
-        self.coord_transform_title = TitleLabel('Coordinate transform')
         self.timing_title = TitleLabel('Timing')
         self.dists_title = TitleLabel('Distances')
         self.saving_title = TitleLabel('Saving')
@@ -758,31 +732,8 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.setLayout(self.grid)
     
         currentRow = 0
-        self.grid.addWidget(self.coord_transform_title, currentRow, 0, 1, 3)
-        currentRow += 1
-        self.grid.addWidget(self.transformCalibrationsPar_label, currentRow, 0)
-        self.grid.addWidget(self.transformCalibrationsPar, currentRow, 1)
-        self.grid.addWidget(self.loadCalibButton, currentRow, 2)
-        currentRow += 1
-        self.grid.addWidget(self.conf_top_x_mon_label, currentRow, 0)
-        self.grid.addWidget(self.conf_top_x_mon_edit, currentRow, 1)
-        self.grid.addWidget(self.conf_top_left_mon_button, currentRow, 2)
-        currentRow += 1
-        self.grid.addWidget(self.conf_top_y_mon_label, currentRow, 0)
-        self.grid.addWidget(self.conf_top_y_mon_edit, currentRow, 1)
-        currentRow += 1
-        self.grid.addWidget(self.conf_size_x_px_mon_label, currentRow, 0)
-        self.grid.addWidget(self.conf_size_x_px_mon_edit, currentRow, 1)
-        self.grid.addWidget(self.conf_bottom_right_mon_button, currentRow, 2)
-        currentRow += 1
-        self.grid.addWidget(self.conf_size_y_px_mon_label, currentRow, 0)
-        self.grid.addWidget(self.conf_size_y_px_mon_edit, currentRow, 1)
-        currentRow += 1
-        self.grid.addWidget(self.saveCalibButton, currentRow, 2)
-        currentRow += 1
         self.grid.addWidget(self.gui_calibration_title, currentRow, 0, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.setRepeatMeasCalibrationButton, currentRow, 1)
         self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 2)
         currentRow += 1
         self.grid.addWidget(self.timing_title, currentRow, 0, 1, 3)
@@ -792,9 +743,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 0)
         self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 1)
-        currentRow += 1
-        self.grid.addWidget(self.drag_dur_label, currentRow, 0)
-        self.grid.addWidget(self.drag_dur_edit, currentRow, 1)
         currentRow += 1
         self.grid.addWidget(self.save_time_label, currentRow, 0)
         self.grid.addWidget(self.save_time_edit, currentRow, 1)
@@ -813,22 +761,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
         topLeftPoint = QPoint(0,670)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
-        
-        self.__calibNameSuffix = '_transformParams.txt'
-
-    def setCalibrationList(self, calibrationsDir):
-        """ Set combobox with available coordinate transformations to use. """
-        for transform in os.listdir(calibrationsDir):
-            if os.path.isfile(os.path.join(calibrationsDir, transform)):
-                if self.__calibNameSuffix in transform:
-                    transform = transform.split('.')[0].split('_')[0]
-                    self.transformCalibrations.append(transform)
-        self.transformCalibrations = list(reversed(self.transformCalibrations))
-        self.transformCalibrationsPar.addItems(self.transformCalibrations)
-        self.transformCalibrationsPar.setCurrentIndex(0)
-
-    def setRepeatMeasCalibrationButtonText(self, coords):
-        self.setRepeatMeasCalibrationButton.setText(f'Rep. meas. calib.: [{coords[0]},{coords[1]}]')
 
     def setDeleteMFXDatasetButtonText(self, coords):
         self.setDeleteMFXDatasetButton.setText(f'Top MFX dataset: [{coords[0]},{coords[1]}]')

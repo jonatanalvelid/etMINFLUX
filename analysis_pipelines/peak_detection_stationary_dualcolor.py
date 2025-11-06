@@ -7,8 +7,8 @@ import pandas as pd
 tp.quiet()
 
 def peak_detection_stationary_dualcolor(img, img_ch2, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                       maxfilter_kersize=5, thresh_abs=10, smoothing_radius=1, border_limit=15, init_smooth=1,
-                       num_prev=4, msm_thresh=0.7, ch2sig_thresh_lo=0.2, ch2sig_thresh_hi=10):
+                       maxfilter_kersize=5, thresh_abs=20, smoothing_radius=1, border_limit=15, init_smooth=1,
+                       num_prev=2, msm_thresh=2, ch2sig_thresh_lo=0.3, ch2sig_thresh_hi=1):
     
     """
     Analysis pipeline to detect bright peaks that are stationary in an image, using a maximum intensity detection filter,
