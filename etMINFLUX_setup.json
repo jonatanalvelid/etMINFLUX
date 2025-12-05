@@ -1,0 +1,60 @@
+{
+    "system_name": "TestSetup",
+    "hardware_settings": {
+        "mfx_exc_lasers": ["MINFLUX640", "MINFLUX560"],
+        "mfx_detectors_gui": ["DAPI", "GFP", "Cy3", "Cy5 near", "Cy5 far", "Cy5 near & Cy5 far", "Cy3 & Cy5 near", "Cy3 & Cy5 far"],
+        "mfx_detectors_imspector": ["DET1", "DET2", "DET3", "DET4", "DET5", "[\"DET4\",\"DET5\"]", "[\"DET3\",\"DET4\"]", "[\"DET3\",\"DET5\"]"],
+        "mfx_detectors_impsector_threads": ["[\"DET1\"]", "[\"DET2\"]", "[\"DET3\"]", "[\"DET4\"]", "[\"DET5\"]", "[\"DET4\",\"DET5\"]", "[\"DET3\",\"DET4\"]", "[\"DET3\",\"DET5\"]"]
+    },
+    "timing_settings": {
+        "sleep_time_base": 0.3,
+        "sleep_time_roiswitch": 1.0,
+        "sleep_time_save": 3.0
+    },
+    "gui_settings": {
+        "top_mfx_dataset_pos": [2157, 1211]
+    },
+    "acquisition_settings": {
+        "minflux_seqs": ["ja_seqTrk3D_Peroxisomes_HaloJF646-m2410",
+                            "ja_seqTrk3D_Dec2022-m2410base-pex13halojf646test",
+                            "ja_seqTrk3D_Peroxisomes_HaloJF646-m2410",
+                            "Tracking_2D_Fast", 
+                            "ja_seqTrk3D_Dec2022-2Csearch-m2410base",
+                            "ja_seqTrk3D_Dec2022-2Cspawn-m2410base",
+                            "ja_seqTrk3D_Dec2022-m2410base",
+                            "ja_Tracking_2D_Fast_Nov2024-m2410base",
+                            "ja_Tracking_2D_Nov2024-2Csearch-m2410base",
+                            "ja_Tracking_2D_Nov2024-2Cspawn-m2410base",
+                            "ja_Tracking_2D_Nov2024-m2410base"],
+        "mfx_exc_lasers": ["MINFLUX640", "MINFLUX560"],
+        "mfx_detectors_gui": ["DAPI", "GFP", "Cy3", "Cy5 near", "Cy5 far", "Cy5 near & Cy5 far", "Cy3 & Cy5 near", "Cy3 & Cy5 far"],
+        "mfx_detectors_imspector": ["DET1", "DET2", "DET3", "DET4", "DET5", "[\"DET4\",\"DET5\"]", "[\"DET3\",\"DET4\"]", "[\"DET3\",\"DET5\"]"],
+        "mfx_detectors_imspector_threads": ["[\"DET1\"]", "[\"DET2\"]", "[\"DET3\"]", "[\"DET4\"]", "[\"DET5\"]", "[\"DET4\",\"DET5\"]", "[\"DET3\",\"DET4\"]", "[\"DET3\",\"DET5\"]"],
+        "confocal_config": "confocal",
+        "minflux_config": "Minflux",
+        "minflux_exc_power_def": 4.0,
+        "minflux_exc_power_th1_def": 0.04,
+        "minflux_act_power_def": 0.0,
+        "minflux_roisize_x_def": 1.0,
+        "minflux_roisize_y_def": 1.0,
+        "minflux_roitime_def": 10.0
+    },
+    "analysis_settings": {
+        "initial_frames_def": 0,
+        "analysis_period_lines_def": 100,
+        "analysis_confocal_frame_pause_def": 10,
+        "binary_pos_thresh_def": 10,
+        "binary_pos_smooth_def": 2.0,
+        "binary_neg_thresh_def": 10,
+        "binary_neg_smooth_def": 2.0,
+        "binary_border_size_def": 15,
+        "min_distance_prev_events": 7.0
+    },
+    "roi_following_settings": {
+        "confocal_interval_def": 60,
+        "redetect_dist_thresh_def": 20
+    },
+    "save_settings": {
+        "save_directory": "C:\\Users\\Abberior_Admin\\Desktop\\Jonatan\\etMINFLUX-data"
+    }
+}

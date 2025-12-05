@@ -6,7 +6,7 @@ from scipy import ndimage as ndi
 import cv2
 
 
-def gag_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+def gag_signalrise_peakdetcheck(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                      num_peaks=300, thresh_abs_lo=1.7, thresh_abs_hi=10):
 
     """
@@ -14,7 +14,7 @@ def gag_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=
     allowing tweaking of peak detection parameters.
     
     Common parameters:
-    img - current image
+    img_ch1 - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
@@ -30,8 +30,8 @@ def gag_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=
     # define non-adjustable parameters
     smoothing_radius_raw = 1.5  # pixels
     
-    img = np.array(img).astype('float32')
-    img_ana = ndi.gaussian_filter(img, smoothing_radius_raw)
+    img_ch1 = np.array(img_ch1).astype('float32')
+    img_ana = ndi.gaussian_filter(img_ch1, smoothing_radius_raw)
     # Peak_local_max as a combo of opencv and numpy
     img_ana = np.clip(img_ana, a_min=0, a_max=None)
     img_ana = img_ana.astype('float32')

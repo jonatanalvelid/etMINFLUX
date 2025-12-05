@@ -88,36 +88,36 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.twoThreadsMFXCheck = CheckBox('Two-threaded MINFLUX')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = FieldLabel('Bin. pos. threshold (cnts)')
-        self.bin_thresh_edit = LineEdit(str(10))
+        self.bin_thresh_edit = LineEdit(str(0))
         self.bin_smooth_label = FieldLabel('Bin. pos. smooth (px)')
-        self.bin_smooth_edit = LineEdit(str(2))
+        self.bin_smooth_edit = LineEdit(str(0))
         self.bin_neg_thresh_label = FieldLabel('Bin. neg. threshold (cnts)')
-        self.bin_neg_thresh_edit = LineEdit(str(10))
+        self.bin_neg_thresh_edit = LineEdit(str(0))
         self.bin_neg_smooth_label = FieldLabel('Bin. neg. smooth (px)')
-        self.bin_neg_smooth_edit = LineEdit(str(2))
+        self.bin_neg_smooth_edit = LineEdit(str(0))
         self.bin_border_size_label = FieldLabel('Bin. border size (px)')
-        self.bin_border_size_edit = LineEdit(str(15))
+        self.bin_border_size_edit = LineEdit(str(0))
         # create editable field for number of initial frames without analysis
         self.init_frames_label = FieldLabel('Initial frames')
         self.init_frames_edit = LineEdit(str(0))
         # create editable fields for MFX acquisition parameters
         self.size_x_label = FieldLabel('MFX ROI size X (µm)')
-        self.size_x_edit = LineEdit(str(1))
+        self.size_x_edit = LineEdit(str(0))
         self.size_y_label = FieldLabel('MFX ROI size Y (µm)')
-        self.size_y_edit = LineEdit(str(1))
+        self.size_y_edit = LineEdit(str(0))
         self.mfx_rectime_label = FieldLabel('MFX ROI rec time (s)')
-        self.mfx_rectime_edit = LineEdit(str(10))
+        self.mfx_rectime_edit = LineEdit(str(0))
         self.mfxth0_exc_laser_label = FieldLabel('MFX exc laser')
         self.mfxth0_exc_laser = list()
         self.mfxth0_exc_laser_par = ComboBox()
         self.mfxth0_exc_pwr_label = FieldLabel('MFX exc power (%)')
-        self.mfxth0_exc_pwr_edit = LineEdit(str(4))
+        self.mfxth0_exc_pwr_edit = LineEdit(str(0))
         self.mfxth1_exc_laser_label = FieldLabel('MFX (th1) exc laser')
         self.mfxth1_exc_laser = list()
         self.mfxth1_exc_laser_par = ComboBox()
         self.mfxth1_exc_laser_par.setEnabled(False)
         self.mfxth1_exc_pwr_label = FieldLabel('MFX (th1) exc power (%)')
-        self.mfxth1_exc_pwr_edit = LineEdit(str(0.04))
+        self.mfxth1_exc_pwr_edit = LineEdit(str(0))
         self.mfxth1_exc_pwr_edit.setEditable(False)
         self.mfxth0_detector_label = FieldLabel('MFX detector(s)')
         self.mfxth0_detector = list()
@@ -145,14 +145,14 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfxth1_detector_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         # create editable fields for analysis control parameters
         self.lines_analysis_label = FieldLabel('Analysis period (lines)')
-        self.lines_analysis_edit = LineEdit(str(100))
-        self.conf_frame_pause_edit = LineEdit(str(10))
+        self.lines_analysis_edit = LineEdit(str(0))
+        self.conf_frame_pause_edit = LineEdit(str(0))
         self.conf_frame_pause_edit.setEditable(False)
         # create editable fields for ROI following mode
         self.follow_roi_interval_label = FieldLabel('Confocal interval (s)')
-        self.follow_roi_interval_edit = LineEdit(str(60))
+        self.follow_roi_interval_edit = LineEdit(str(0))
         self.follow_roi_redetectthresh_label = FieldLabel('Redetect dist threshold (px)')
-        self.follow_roi_redetectthresh_edit = LineEdit(str(20))
+        self.follow_roi_redetectthresh_edit = LineEdit(str(0))
         # create GUI group titles
         self.saving_title = TitleLabel('Saving')
         self.binary_title = TitleLabel('Binary mask')
@@ -305,6 +305,29 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
     def resetEventViewWidget(self):
         self.eventViewWidget = EventWidget()
+        
+    def setDefaultValues(self, setupInfo: dict):
+        """ Set default values from the setup info dictionary loaded from json file. """
+        # set binary mask calculation default values
+        self.bin_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_thresh_def')))
+        self.bin_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_smooth_def')))
+        self.bin_neg_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_thresh_def')))
+        self.bin_neg_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_smooth_def')))
+        self.bin_border_size_edit.setText(str(setupInfo.get('analysis_settings').get('binary_border_size_def')))
+        # set MINFLUX laser power default values
+        self.mfxth0_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_def')))
+        self.mfxth1_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_th1_def')))
+        self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
+        # set MINFLUX ROI size and recording time default values
+        self.size_x_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_x_def')))
+        self.size_y_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_y_def')))
+        self.mfx_rectime_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roitime_def')))
+        # set etMINFLUX analysis control default values
+        self.lines_analysis_edit.setText(str(setupInfo.get('analysis_settings').get('analysis_period_lines_def')))
+        self.conf_frame_pause_edit.setText(str(setupInfo.get('analysis_settings').get('analysis_confocal_frame_pause_def')))
+        # set ROI following mode default values
+        self.follow_roi_interval_edit.setText(str(setupInfo.get('roi_following_settings').get('confocal_interval_def')))
+        self.follow_roi_redetectthresh_edit.setText(str(setupInfo.get('roi_following_settings').get('redetect_dist_thresh_def')))
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -711,16 +734,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.save_dir_edit = LineEdit('Default data folder')
         self.save_dir_edit.setEditable(False)
 
-        # time sleeps and drag durations
-        self.time_sleep_label = FieldLabel('Time sleeps (s)')
-        self.time_sleep_edit = LineEdit(str(0.3))
-        self.time_sleep_roiswitch_label = FieldLabel('Time sleeps - ROI switch (s)')
-        self.time_sleep_roiswitch_edit = LineEdit(str(1))
-        self.save_time_label = FieldLabel('Save time (s)')
-        self.save_time_edit = LineEdit(str(3))
-        self.min_dist_prev_event_label = FieldLabel('Min distance to previous events (px)')
-        self.min_dist_prev_event_edit = LineEdit(str(7))
-
         # Create titles
         self.gui_calibration_title = TitleLabel('GUI calibration')
         self.timing_title = TitleLabel('Timing')
@@ -735,22 +748,6 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.gui_calibration_title, currentRow, 0, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 2)
-        currentRow += 1
-        self.grid.addWidget(self.timing_title, currentRow, 0, 1, 3)
-        currentRow += 1
-        self.grid.addWidget(self.time_sleep_label, currentRow, 0)
-        self.grid.addWidget(self.time_sleep_edit, currentRow, 1)
-        currentRow += 1
-        self.grid.addWidget(self.time_sleep_roiswitch_label, currentRow, 0)
-        self.grid.addWidget(self.time_sleep_roiswitch_edit, currentRow, 1)
-        currentRow += 1
-        self.grid.addWidget(self.save_time_label, currentRow, 0)
-        self.grid.addWidget(self.save_time_edit, currentRow, 1)
-        currentRow += 1
-        self.grid.addWidget(self.dists_title, currentRow, 0, 1, 3)
-        currentRow += 1
-        self.grid.addWidget(self.min_dist_prev_event_label, currentRow, 0)
-        self.grid.addWidget(self.min_dist_prev_event_edit, currentRow, 1)
         currentRow += 1
         self.grid.addWidget(self.saving_title, currentRow, 0, 1, 3)
         currentRow += 1
@@ -779,7 +776,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# ImSwitch is distributed in the hope that it will be useful,
+# EtMINFLUX is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.

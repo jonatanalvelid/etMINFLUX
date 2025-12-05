@@ -6,7 +6,7 @@ import pandas as pd
 
 tp.quiet()
 
-def peak_detection_stationary_dualcolor(img, img_ch2, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                        maxfilter_kersize=5, thresh_abs=20, smoothing_radius=1, border_limit=15, init_smooth=1,
                        num_prev=2, msm_thresh=2, ch2sig_thresh_lo=0.3, ch2sig_thresh_hi=1):
     
@@ -16,7 +16,7 @@ def peak_detection_stationary_dualcolor(img, img_ch2, prev_frames=None, binary_m
     also considers a second channel, from img_ch2, and checks that the mean signal in that channel is within a certain range. 
     
     Common parameters:
-    img - current image
+    img_ch1 - current image
     img_ch2 - current image in the second channel
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
@@ -36,16 +36,16 @@ def peak_detection_stationary_dualcolor(img, img_ch2, prev_frames=None, binary_m
     """
     roi_sizes = False
 
-    if binary_mask is None or np.shape(binary_mask) != np.shape(img):
-        binary_mask = np.ones(np.shape(img)).astype('uint16')
+    if binary_mask is None or np.shape(binary_mask) != np.shape(img_ch1):
+        binary_mask = np.ones(np.shape(img_ch1)).astype('uint16')
 
-    img = np.array(img).astype('float32')
+    img_ch1 = np.array(img_ch1).astype('float32')
     img_ch2 = np.array(img_ch2).astype('float32')
     if init_smooth==1:
-        img = ndi.gaussian_filter(img, smoothing_radius)
+        img_ch1 = ndi.gaussian_filter(img_ch1, smoothing_radius)
     
     # multiply with binary mask
-    img_ana = img * np.array(binary_mask)
+    img_ana = img_ch1 * np.array(binary_mask)
 
     # Peak_local_max in current image as a combo of opencv and numpy
     size = int(2 * maxfilter_kersize + 1)
@@ -67,7 +67,7 @@ def peak_detection_stationary_dualcolor(img, img_ch2, prev_frames=None, binary_m
     coordinates = np.transpose(coordinates)[idx_maxsort]
 
     # remove everything on the border (takes ~2-3ms if there are a lot of detected coordinates, but usually this is not the case)
-    imsize = np.shape(img)[0]
+    imsize = np.shape(img_ch1)[0]
     idxremove = []
     for idx, coordpair in enumerate(coordinates):
         if coordpair[0] < border_limit or coordpair[0] > imsize - border_limit or coordpair[1] < border_limit or coordpair[1] > imsize - border_limit:
@@ -87,7 +87,7 @@ def peak_detection_stationary_dualcolor(img, img_ch2, prev_frames=None, binary_m
     intensities = []
     intensitiesch2 = []
     for coord in coordinates:
-        intensity = np.sum(img[coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1,coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
+        intensity = np.sum(img_ch1[coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1,coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
         intensitych2 = np.sum(img_ch2[coord[1]-intensity_sum_rad_ch2:coord[1]+intensity_sum_rad_ch2+1,coord[0]-intensity_sum_rad_ch2:coord[0]+intensity_sum_rad_ch2+1])/(2*intensity_sum_rad_ch2+1)**2
         intensities.append(intensity)
         intensitiesch2.append(intensitych2)

@@ -6,7 +6,7 @@ from scipy import ndimage as ndi
 import cv2
 
 
-def dyn_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+def dyn_signalrise_peakdetcheck(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                      min_dist=1, num_peaks=1000, thresh_abs_lo=1.1, thresh_abs_hi=15):
 
     """
@@ -14,7 +14,7 @@ def dyn_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=
     allowing tweaking of peak detection parameters.
        
     Common parameters:
-    img - current image
+    img_ch1 - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
@@ -34,8 +34,8 @@ def dyn_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=
     dog_hi = 3
     
     # gaussian filter raw image
-    img = np.array(img).astype('float32')
-    img_filt = ndi.gaussian_filter(img, smoothing_radius)
+    img_ch1 = np.array(img_ch1).astype('float32')
+    img_filt = ndi.gaussian_filter(img_ch1, smoothing_radius)
 
     # difference of gaussians to get clear peaks separated from spread-out bkg and noise
     img_dog_lo = ndi.gaussian_filter(img_filt, dog_lo)

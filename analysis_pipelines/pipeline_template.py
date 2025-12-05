@@ -1,9 +1,9 @@
 import numpy as np
 
-def pipeline_template(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, var1=0, var2=1.5, var3=100):
+def pipeline_template(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, var1=0.3, var2=1.5, var3=5):
     """ Template etMINFLUX real-time analysis pipeline.
     The provided method variables have to be included in the signature, and are the following:
-    img - current confocal image (np.array)
+    img_ch1 - current confocal image (np.array)
     prev_frames - previous confocal image(s)
     binary_mask - binary mask of the regions to consider
     exinfo - any Python object that should be returned from the function and input to the next pipeline call on the following confocal frame;
@@ -30,8 +30,11 @@ def pipeline_template(img, prev_frames=None, binary_mask=None, exinfo=None, pres
     """
     
     roi_sizes = False
-    return_img = img
+    return_img = img_ch1
     x1,x2,x3,y1,y2,y3 = 15,30,60,12,48,100
+    x1 = x1 * var1
+    x2 = x2 * var2
+    x3 = x3 * var3
     coordinates = np.array([[x1, y1],[x2, y2],[x3, y3]])
     
     return coordinates, roi_sizes, exinfo, return_img
