@@ -791,18 +791,6 @@ class EtMINFLUXController(QtCore.QObject):
         coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(*self.imgs, self.__prevFrames, self.__binary_mask,
                                                                         self.__exinfo, self.__presetROISize,
                                                                         *self.__pipeline_param_vals)
-        #if self.__count_conf_channels == 1:
-        #    coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.imgs[0], self.__prevFrames, self.__binary_mask,
-        #                                                                            self.__exinfo, self.__presetROISize,
-        #                                                                            *self.__pipeline_param_vals)
-        #elif self.__count_conf_channels == 2:
-        #    coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.img_ch2, self.__prevFrames, self.__binary_mask,
-        #                                                                            self.__exinfo, self.__presetROISize,
-        #                                                                            *self.__pipeline_param_vals)
-        #elif self.__count_conf_channels == 3:
-        #    coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(self.img, self.img_ch2, self.img_ch3, self.__prevFrames, self.__binary_mask,
-        #                                                                            self.__exinfo, self.__presetROISize,
-        #                                                                            *self.__pipeline_param_vals)
         self.__pipeline_end_time = time.perf_counter()
         self.__pipeline_runtimes.append(round((self.__pipeline_end_time-self.__pipeline_start_time)*1e3,3))  # in ms with µs precision
         return coords_detected, roi_sizes

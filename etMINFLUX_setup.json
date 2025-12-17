@@ -1,5 +1,6 @@
 {
     "system_name": "TestSetup",
+    "system_simulation": true,
     "hardware_settings": {
         "mfx_exc_lasers": ["MINFLUX640", "MINFLUX560"],
         "mfx_detectors_gui": ["DAPI", "GFP", "Cy3", "Cy5 near", "Cy5 far", "Cy5 near & Cy5 far", "Cy3 & Cy5 near", "Cy3 & Cy5 far"],

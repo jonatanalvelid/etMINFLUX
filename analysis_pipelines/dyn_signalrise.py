@@ -143,6 +143,7 @@ def dyn_signalrise(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, pre
                         # and that it increases in all three ratios
                         track_self = track_self_after.tail(1)
                         prev_frames = np.array(prev_frames).astype('float32')
+                        print(np.shape(prev_frames))
                         track_intensity_before = np.sum(prev_frames[-2*frames_appear:-frames_appear, int(track_self['x'])-intensity_sum_rad:int(track_self['x'])+intensity_sum_rad+1,
                                                                    int(track_self['y'])-intensity_sum_rad:int(track_self['y'])+intensity_sum_rad+1],
                                                                axis=(1,2))/(2*intensity_sum_rad+1)**2
