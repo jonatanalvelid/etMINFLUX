@@ -47,8 +47,8 @@ class EtMINFLUXController(QtCore.QObject):
         # default data dir
         self._dataDir = self.setupInfo.get('save_settings').get('save_directory')
         # list of available detectors for MFX imaging
-        self.mfxDetectorList = self.setupInfo.get('acquisition_settings').get('mfx_detectors_imspector')
-        self.mfxDetectorListThreads = self.setupInfo.get('acquisition_settings').get('mfx_detectors_imspector_threads')
+        self.mfxDetectorList = self.setupInfo.get('hardware_settings').get('mfx_detectors_imspector')
+        self.mfxDetectorListThreads = self.setupInfo.get('hardware_settings').get('mfx_detectors_imspector_threads')
         # default screen position of top MINFLUX dataset in Workspace widget in Imspector
         self._set_topmfxdataset_button_pos = self.setupInfo.get('gui_settings').get('top_mfx_dataset_pos')
         
@@ -83,10 +83,10 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setMfxSequenceList(self.setupInfo.get('acquisition_settings').get('minflux_seqs'), thread=1)
 
         # set list of available lasers for MFX imaging, get this list manually from Imspector control software
-        self._widget.setMinfluxExcLaserList(self.setupInfo.get('acquisition_settings').get('mfx_exc_lasers'), thread=0)
-        self._widget.setMinfluxExcLaserList(self.setupInfo.get('acquisition_settings').get('mfx_exc_lasers'), thread=1)
-        self._widget.setMinfluxDetectorList(self.setupInfo.get('acquisition_settings').get('mfx_detectors_gui'), thread=0)
-        self._widget.setMinfluxDetectorList(self.setupInfo.get('acquisition_settings').get('mfx_detectors_gui'), thread=1)
+        self._widget.setMinfluxExcLaserList(self.setupInfo.get('hardware_settings').get('mfx_exc_lasers'), thread=0)
+        self._widget.setMinfluxExcLaserList(self.setupInfo.get('hardware_settings').get('mfx_exc_lasers'), thread=1)
+        self._widget.setMinfluxDetectorList(self.setupInfo.get('hardware_settings').get('mfx_detectors_gui'), thread=0)
+        self._widget.setMinfluxDetectorList(self.setupInfo.get('hardware_settings').get('mfx_detectors_gui'), thread=1)
 
         # create a helper controller for the coordinate transform pop-out widget
         self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget)
