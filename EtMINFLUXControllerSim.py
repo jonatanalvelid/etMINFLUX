@@ -39,8 +39,6 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         
         # SYSTEM-SPECIFIC SETTINGS - MAKE SURE TO CHANGE THESE VARIABLES IN THE SETUP JSON TO YOUR SPECIFIC SYSTEM CONFIG
         self.setupInfo = self.loadSetupJson(filepath='etMINFLUX_setup.json')
-        # set default values of various parameters in the GUI from the setup JSON
-        self._widget.setDefaultValues(self.setupInfo)
         # default data dir
         self._dataDir = self.setupInfo.get('save_settings').get('save_directory')
         # list of available detectors for MFX imaging
@@ -48,6 +46,10 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.mfxDetectorListThreads = self.setupInfo.get('hardware_settings').get('mfx_detectors_imspector_threads')
         # default screen position of top MINFLUX dataset in Workspace widget in Imspector
         self._set_topmfxdataset_button_pos = self.setupInfo.get('gui_settings').get('top_mfx_dataset_pos')
+        # if any activation lasers are present
+        self._act_lasers_present = len(self.setupInfo.get('hardware_settings').get('mfx_act_lasers')) > 0
+        # set default values of various parameters in the GUI from the setup JSON
+        self._widget.setDefaultValues(self.setupInfo, self._act_lasers_present)
         
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
 
@@ -73,6 +75,8 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self._widget.setMinfluxExcLaserList(self.setupInfo.get('hardware_settings').get('mfx_exc_lasers'), thread=1)
         self._widget.setMinfluxDetectorList(self.setupInfo.get('hardware_settings').get('mfx_detectors_gui'), thread=0)
         self._widget.setMinfluxDetectorList(self.setupInfo.get('hardware_settings').get('mfx_detectors_gui'), thread=1)
+        if self._act_lasers_present:
+            self._widget.setMinfluxActLaserList(self.setupInfo.get('hardware_settings').get('mfx_act_lasers'))
 
         # create a helper controller for the coordinate transform pop-out widget
         self.__analysisHelper = AnalysisImgHelper(self, self._widget.analysisHelpWidget)

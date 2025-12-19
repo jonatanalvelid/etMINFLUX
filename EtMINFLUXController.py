@@ -42,8 +42,6 @@ class EtMINFLUXController(QtCore.QObject):
         
         # SYSTEM-SPECIFIC SETTINGS - MAKE SURE TO CHANGE THESE VARIABLES IN THE SETUP JSON TO YOUR SPECIFIC SYSTEM CONFIG
         self.setupInfo = self.loadSetupJson(filepath='etMINFLUX_setup.json')
-        # set default values of various parameters in the GUI from the setup JSON
-        self._widget.setDefaultValues(self.setupInfo)
         # default data dir
         self._dataDir = self.setupInfo.get('save_settings').get('save_directory')
         # list of available detectors for MFX imaging
@@ -51,6 +49,10 @@ class EtMINFLUXController(QtCore.QObject):
         self.mfxDetectorListThreads = self.setupInfo.get('hardware_settings').get('mfx_detectors_imspector_threads')
         # default screen position of top MINFLUX dataset in Workspace widget in Imspector
         self._set_topmfxdataset_button_pos = self.setupInfo.get('gui_settings').get('top_mfx_dataset_pos')
+        # if any activation lasers are present
+        self._act_lasers_present = len(self.setupInfo.get('hardware_settings').get('mfx_act_lasers')) > 0
+        # set default values of various parameters in the GUI from the setup JSON
+        self._widget.setDefaultValues(self.setupInfo, self._act_lasers_present)
         
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
 
@@ -87,6 +89,8 @@ class EtMINFLUXController(QtCore.QObject):
         self._widget.setMinfluxExcLaserList(self.setupInfo.get('hardware_settings').get('mfx_exc_lasers'), thread=1)
         self._widget.setMinfluxDetectorList(self.setupInfo.get('hardware_settings').get('mfx_detectors_gui'), thread=0)
         self._widget.setMinfluxDetectorList(self.setupInfo.get('hardware_settings').get('mfx_detectors_gui'), thread=1)
+        if self._act_lasers_present:
+            self._widget.setMinfluxActLaserList(self.setupInfo.get('hardware_settings').get('mfx_act_lasers'))
 
         # create a helper controller for the coordinate transform pop-out widget
         self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget)
@@ -209,7 +213,7 @@ class EtMINFLUXController(QtCore.QObject):
             detectorIdxth0 = self._widget.mfxth0_detector_par.currentIndex()
             self.mfxth0_detector = self.mfxDetectorListThreads[detectorIdxth0]
             self.mfxch0_detector = self.mfxDetectorList[detectorIdxth0]
-            #self.mfxth0_act_pwr = float(self._widget.mfx_act_pwr_edit.text())
+            self.mfx_act_pwr = float(self._widget.mfx_act_pwr_edit.text())
             if self.__mfx_twothreaded:
                 sequenceIdxth1 = self._widget.mfxth1_seq_par.currentIndex()
                 self.mfxth1_seq = self._widget.mfx_seqs[sequenceIdxth1]
@@ -1172,7 +1176,10 @@ class EtMINFLUXController(QtCore.QObject):
             self.setMFXDataTag(pos_conf, ROI_size, self.__roiFollowMultipleCurrIdx, self.__roiFollowCurrCycle)
         else:
             self.setMFXDataTag(pos_conf, ROI_size, self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
-        self.setMFXLasers(self.mfxth0_exc_laser, self.mfxth0_exc_pwr, thread=0)  #, self.mfx_act_pwr)
+        if self._act_lasers_present:
+            self.setMFXLasers(self.mfxth0_exc_laser, self.mfxth0_exc_pwr, 0, self.mfx_act_pwr)
+        else:
+            self.setMFXLasers(self.mfxth0_exc_laser, self.mfxth0_exc_pwr, thread=0)
         channelDetectors = []
         if len(self.mfxch0_detector) > 4:
             channelDetectors.append(self.mfxch0_detector.split('"')[1])
@@ -1270,14 +1277,16 @@ class EtMINFLUXController(QtCore.QObject):
             rec_time_int = int(self.__rec_time_scan)
         self._imspector.value_at('Minflux/flow/stop_time', specpy.ValueTree.Measurement).set(rec_time_int)
 
-    def setMFXLasers(self, exc_laser, exc_pwr, thread=0):  #, act_pwr):
+    def setMFXLasers(self, exc_laser, exc_pwr, thread=0, act_pwr=None):
         """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
         self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/exc', specpy.ValueTree.Measurement).set(exc_laser)
         self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/exp', specpy.ValueTree.Measurement).set(exc_pwr)
         # set activation laser (405)
-        #laser_status_act = True if act_pwr > 0 else False
-        #self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
-        #self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
+        if act_pwr != None:
+            laser_status_act = True if act_pwr > 0 else False
+            # TODO: CHECK IF THIS WORKS AS INTENDED. SHOULD BE CORRECT FOR M2205 - HOW ABOUT FOR M2410?
+            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
+            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
 
     def setMFXDetectorsChannels(self, detectors):
         """ Sets available MINFLUX detectors in the channels, according to the GUI choice of the user. """

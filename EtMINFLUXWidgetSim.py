@@ -136,21 +136,29 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         self.mfxth1_detector = list()
         self.mfxth1_detector_par = ComboBox()
         self.mfxth1_detector_par.setEnabled(False)
-        self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
-        self.mfx_act_pwr_edit = LineEdit(str(0))
         self.mfxth0_seq_label = FieldLabel('MFX sequence')
         self.mfxth0_seq = list()
         self.mfxth0_seq_par = ComboBox()
         self.mfxth1_seq_label = FieldLabel('MFX (th1) sequence')
         self.mfxth1_seq = list()
         self.mfxth1_seq_par = ComboBox()
+        self.mfx_act_laser_label = FieldLabel('MFX act laser')
+        self.mfx_act_laser = list()
+        self.mfx_act_laser_par = ComboBox()
+        self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
+        self.mfx_act_pwr_edit = LineEdit(str(0))
+        self.mfx_act_pwr_edit.setEditable(False)
         # disable th1 fields by default
         self.mfxth1_seq_par.setEnabled(False)
+        self.mfx_act_laser_par.setEnabled(False)
         self.mfxth1_seq_label.setStyleSheet('color: rgb(83,83,83);')
+        self.mfx_act_pwr_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_exc_laser_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_exc_pwr_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_detector_label.setStyleSheet('color: rgb(83,83,83);')
+        self.mfx_act_laser_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_seq_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+        self.mfx_act_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         self.mfxth1_exc_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         self.mfxth1_detector_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         # create editable fields for analysis control parameters
@@ -265,6 +273,9 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         self.grid.addWidget(self.mfxth1_detector_label, currentRow, 2)
         self.grid.addWidget(self.mfxth1_detector_par, currentRow, 3)
         currentRow += 1
+        self.grid.addWidget(self.mfx_act_laser_label, currentRow, 2)
+        self.grid.addWidget(self.mfx_act_laser_par, currentRow, 3)
+        currentRow += 1
         self.grid.addWidget(self.mfx_act_pwr_label, currentRow, 2)
         self.grid.addWidget(self.mfx_act_pwr_edit, currentRow, 3)
         self.grid.addWidget(self.triggerRandomROICheck, currentRow, 4)
@@ -330,7 +341,7 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
     def resetEventViewWidget(self):
         self.eventViewWidget = EventWidget()
         
-    def setDefaultValues(self, setupInfo: dict):
+    def setDefaultValues(self, setupInfo: dict, activation_lasers_present: bool):
         """ Set default values from the setup info dictionary loaded from json file. """
         # set binary mask calculation default values
         self.bin_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_thresh_def')))
@@ -341,7 +352,6 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         # set MINFLUX laser power default values
         self.mfxth0_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_def')))
         self.mfxth1_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_th1_def')))
-        self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
         # set MINFLUX ROI size and recording time default values
         self.size_x_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_x_def')))
         self.size_y_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_y_def')))
@@ -352,6 +362,9 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         # set ROI following mode default values
         self.follow_roi_interval_edit.setText(str(setupInfo.get('roi_following_settings').get('confocal_interval_def')))
         self.follow_roi_redetectthresh_edit.setText(str(setupInfo.get('roi_following_settings').get('redetect_dist_thresh_def')))
+        # activation laser powers default values
+        if activation_lasers_present:
+            self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
 
     def initParamFields(self, parameters: dict, params_exclude: list):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -418,6 +431,12 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         elif thread == 1:
             self.mfxth1_exc_laser_par.addItems(self.mfx_exc_lasers)
             self.mfxth1_exc_laser_par.setCurrentIndex(1)
+
+    def setMinfluxActLaserList(self, actLasers):
+        """ Set combobox with available excitation lasers to use. """
+        self.mfx_act_lasers = actLasers
+        self.mfx_act_laser_par.addItems(self.mfx_act_lasers)
+        self.mfx_act_laser_par.setCurrentIndex(0)
 
     def setMinfluxDetectorList(self, detectors, thread=0):
         """ Set combobox with available excitation lasers to use. """

@@ -4,7 +4,7 @@
     "hardware_settings": {
         "mfx_exc_lasers": ["MINFLUX640",
                             "MINFLUX560"],
-        "mfx_act_lasers": ["EXC405"],
+        "mfx_act_lasers": ["ACT405"],
         "mfx_detectors_gui": ["DAPI",
                                 "GFP",
                                 "Cy3",
@@ -54,7 +54,7 @@
         "minflux_config": "Minflux",
         "minflux_exc_power_def": 4.0,
         "minflux_exc_power_th1_def": 0.04,
-        "minflux_act_power_def": 0.0,
+        "minflux_act_power_def": 3.0,
         "minflux_roisize_x_def": 1.0,
         "minflux_roisize_y_def": 1.0,
         "minflux_roitime_def": 10.0
