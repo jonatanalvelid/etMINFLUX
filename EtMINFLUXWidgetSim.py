@@ -53,12 +53,13 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         self.initiateButton = PushButton('Initiate etMINFLUX')
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = PushButton('Load pipeline')
-        # create buttons for calibrating coordinate transform, recording binary mask, save current measurement, load confocal data
+        # create buttons for calibrating coordinate transform, recording binary mask, save current measurement, load confocal data, open guide
         self.coordTransfCalibButton = PushButton('Transform calibration')
         self.recordBinaryMaskButton = PushButton('Record binary mask')
         self.resetBinaryMaskButton = PushButton('Reset binary mask')
         self.saveCurrentMeasButton = PushButton('Save curr. meas.')
         self.selectDataLoadButton = PushButton('Select confocal data')
+        self.openGuideButton = PushButton('Open guide')
         # creat button for unlocking any softlock happening
         self.softResetButton = PushButton('Soft reset')
         # create check box for endless running mode
@@ -166,7 +167,7 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         self.preload_confocal_frametime_label = FieldLabel('Confocal frame time (s)')
         self.preload_confocal_frametime_edit = LineEdit(str(0))
         # create GUI group titles
-        self.saving_title = TitleLabel('Saving')
+        self.saving_title = TitleLabel('Saving and guide')
         self.binary_title = TitleLabel('Binary mask')
         self.minflux_title = TitleLabel('MINFLUX imaging parameters')
         self.pipeline_title = TitleLabel('Analysis pipeline')
@@ -194,6 +195,8 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
         # help widget for event viewing
         self.eventViewWidget = EventWidget()
+        # help widget for displaying guide
+        self.guideWidget = GuideWidget()
 
         # create grid and grid layout
         self.grid = QtWidgets.QGridLayout()
@@ -311,6 +314,7 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         self.grid.addWidget(self.autoSaveCheck, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.openGuideButton, currentRow, 3)
         self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
 
         frame_gm = self.frameGeometry()
@@ -779,6 +783,40 @@ class CoordTransformWidget(QtWidgets.QWidget):
     
     def setSaveFolderField(self, folder):
         self.save_dir_edit.setText(folder)
+
+
+class GuideWidget(QtWidgets.QWidget):
+    """ Pop-up widget for displaying the etMINFLUX experiment guide. """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # set graphic style of widget
+        self.setStyleSheet('background-color: rgb(70,70,70);')
+
+        # create text browser
+        self.textBrowser = QtWidgets.QTextBrowser()
+        self.textBrowser.setStyleSheet('background-color: rgb(200,200,200)')
+
+        # generate GUI layout
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        
+        self.setWindowTitle('etMINFLUX guide')
+    
+        currentRow = 0
+        self.grid.addWidget(self.textBrowser, currentRow, 0, 1, 3)
+        
+        frame_gm = self.frameGeometry()
+        topLeftPoint = QPoint(0,670)
+        frame_gm.moveTopLeft(topLeftPoint)
+        self.move(frame_gm.topLeft())
+
+    def setText(self, text=None, source=None):
+        if text != None:
+            self.textBrowser.setText(text)
+        elif source != None:
+            self.textBrowser.setSource(source)
 
 
 # Copyright (C) 2023-2025 Jonatan Alvelid

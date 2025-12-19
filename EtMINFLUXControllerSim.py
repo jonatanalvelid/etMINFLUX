@@ -90,6 +90,8 @@ class EtMINFLUXControllerSim(QtCore.QObject):
 
         self._widget.selectDataLoadButton.clicked.connect(self.getConfocalData)
         self._widget.coordTransformWidget.setSaveDirButton.clicked.connect(self.getSaveFolder)
+        
+        self._widget.openGuideButton.clicked.connect(self.openGuide)
 
         # create timer for confocal intermittent pause time
         self.confPauseTimerThread = QtCore.QThread(self)
@@ -146,6 +148,14 @@ class EtMINFLUXControllerSim(QtCore.QObject):
     def getSaveFolder(self):
         self._dataDir = self._widget.coordTransformWidget.getSaveFolder()
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
+
+    def openGuide(self):
+        # load text from markdown file
+        guidetext_url = QtCore.QUrl.fromLocalFile("guidetext.md")
+        # show text in subwidget
+        self._widget.guideWidget.setText(source=guidetext_url)
+        # open subwidget
+        self._widget.launchHelpWidget(self._widget.guideWidget, init=True)
 
     def getConfocalData(self):
         confocal_data_file = askopenfilename(title='Select folder...')

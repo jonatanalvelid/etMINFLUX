@@ -4,6 +4,7 @@
     "hardware_settings": {
         "mfx_exc_lasers": ["MINFLUX640",
                             "MINFLUX560"],
+        "mfx_act_lasers": ["EXC405"],
         "mfx_detectors_gui": ["DAPI",
                                 "GFP",
                                 "Cy3",
