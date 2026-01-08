@@ -112,7 +112,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_exc_pwr_edit = LineEdit(str(4))
         self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
         self.mfx_act_pwr_edit = LineEdit(str(0))
-        self.mfx_act_pwr_edit.setEditable(False)
         self.mfx_seq_label = FieldLabel('MFX sequence')
         self.mfx_seq = list()
         self.mfx_seq_par = ComboBox()
