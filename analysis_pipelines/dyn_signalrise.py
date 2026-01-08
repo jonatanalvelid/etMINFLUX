@@ -65,8 +65,11 @@ def dyn_signalrise(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, pre
     img_dog = np.clip(img_dog, a_min=0, a_max=30000)
 
     # further filtering to get a better image for peak detection
-    #img_ana = img_dog * binary_mask
-    img_ana = img_dog.astype('float32')
+    if binary_mask is None:
+        img_ana = img_dog.astype('float32')
+    else:
+        img_ana = img_dog * binary_mask
+        img_ana = img_ana.astype('float32')
     img_ana = ndi.gaussian_filter(img_ana, smoothing_radius)  # Gaussian filter the image, to remove noise, to get a better center estimate
     # Peak_local_max all-in-one as a combo of opencv and cupy
     # get filter structuring element

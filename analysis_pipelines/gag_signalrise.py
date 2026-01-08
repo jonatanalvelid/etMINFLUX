@@ -60,7 +60,11 @@ def gag_signalrise(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, pre
     track_search_dist = int(track_search_dist)
     thresh_stayframes = int(frames_appear*0.7)  # can be gone after it appears, for 30% of frames that comes
     
-    img_ch1 = np.array(img_ch1).astype('float32')
+    if binary_mask is None:
+        img_ch1 = np.array(img_ch1).astype('float32')
+    else:
+        img_ch1 = img_ch1 * binary_mask
+        img_ch1 = np.array(img_ch1).astype('float32')
     img_ana = ndi.gaussian_filter(img_ch1, smoothing_radius_raw)
     # Peak_local_max as a combo of opencv and numpy
     img_ana = np.clip(img_ana, a_min=0, a_max=None)

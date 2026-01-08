@@ -79,14 +79,14 @@ class EtMINFLUXControllerSim(QtCore.QObject):
             self._widget.setMinfluxActLaserList(self.setupInfo.get('hardware_settings').get('mfx_act_lasers'))
 
         # create a helper controller for the coordinate transform pop-out widget
+        self.__coordTransformHelper = EtCoordTransformHelper(self, self._widget.coordTransformWidget)
+        self.__binaryMaskHelper = BinaryMaskHelper(self, self._widget.binaryMaskWidget)
         self.__analysisHelper = AnalysisImgHelper(self, self._widget.analysisHelpWidget)
         self.__eventViewHelper = EventWidgetHelper(self, self._widget.eventViewWidget)
 
         # Connect EtMINFLUXWidget button and check box signals
         self._widget.initiateButton.clicked.connect(self.initiate)
         self._widget.loadPipelineButton.clicked.connect(self.loadPipeline)
-        self._widget.recordBinaryMaskButton.clicked.connect(self.initiateBinaryMask)
-        self._widget.resetBinaryMaskButton.clicked.connect(self.resetBinaryMask)
         self._widget.softResetButton.clicked.connect(self.softReset)
 
         self._widget.coordListWidget.delROIButton.clicked.connect(self.deleteROI)
@@ -138,11 +138,12 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.__confocalFramePause = False
         self.__count_conf_channels = 1
         self.__img_ana = None
+        self._preloaded_confocal_data = deque()
         self.__prev_event_coords_deque = deque(maxlen=100)
         self.__prevFrames = deque(maxlen=50)  # deque for previous fast frames
         self.__prevAnaFrames = deque(maxlen=50)  # deque for previous preprocessed analysis frames
-        self.__binary_mask = None  # binary mask of regions of interest, used by certain pipelines, leave None to consider the whole image
-        self.__binary_frames = 2  # number of frames to use for calculating binary mask 
+        self.binary_mask = None  # binary mask of regions of interest, used by certain pipelines, leave None to consider the whole image
+        self.binary_frames = 2  # number of frames to use for calculating binary mask 
         self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img_ch1', 'img_ch2', 'img_ch3', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
@@ -331,41 +332,10 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         pipelinename = self.getPipelineName()
         self.pipeline = getattr(importlib.import_module(f'{pipelinename}'), f'{pipelinename}')
         self.__pipeline_params = signature(self.pipeline).parameters
-        self._widget.initParamFields(self.__pipeline_params, self.__params_exclude)
         # get parameter for how many confocal channels the loaded pipeline uses
         self.__count_conf_channels = len([channel for channel in self.__pipeline_params.keys() if 'img_ch' in channel])
-
-    def initiateBinaryMask(self):
-        """ Initiate the process of calculating a binary mask of the region of interest. """
-        self.launchHelpWidget()
-        self._widget.recordBinaryMaskButton.setText('Recording...')
-        self.__binary_stack = []
-        imgs = []
-        for _ in range(self.__binary_frames):
-            imgs.append(self._preloaded_confocal_data.popleft())
-            self.__binary_stack.append(imgs[-1])
-        for img in reversed(imgs):
-            self._preloaded_confocal_data.appendleft(img)
-        self.calculateBinaryMask()
-
-    def resetBinaryMask(self):
-        """ Reset binary mask, back to None. """
-        self.__binary_stack = []
-        self.__binary_mask = None  # None to consider the whole image
-
-    def calculateBinaryMask(self):
-        """ Calculate the binary mask of the region of interest, using both positive and negative masks. """
-        img_mean = np.mean(self.__binary_stack, 0)
-        img_bin_pos = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_smooth_edit.text()))
-        img_bin_neg = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_neg_smooth_edit.text()))
-        img_bin_pos = np.array(img_bin_pos > float(self._widget.bin_thresh_edit.text()))
-        img_bin_neg = np.array(img_bin_neg < float(self._widget.bin_neg_thresh_edit.text()))
-        img_bin_border = np.zeros(np.shape(img_bin_pos))
-        border_size = int(self._widget.bin_border_size_edit.text())
-        img_bin_border[border_size:-border_size, border_size:-border_size] = 1
-        self.__binary_mask = np.logical_and(np.logical_and(img_bin_pos, img_bin_neg), img_bin_border)
-        self._widget.recordBinaryMaskButton.setText('Record binary mask')
-        self.setAnalysisHelpImg(self.__binary_mask)
+        # set GUI fields for pipeline parameters
+        self._widget.initParamFields(self.__pipeline_params, self.__params_exclude, self.__count_conf_channels)
 
     def setAnalysisHelpImg(self, img):
         """ Set the preprocessed image in the analysis help widget. """
@@ -451,8 +421,8 @@ class EtMINFLUXControllerSim(QtCore.QObject):
 
     def generateRandomCoord(self, roi_sizes):
         """ Generate random coord inside the binary mask. """         
-        if self.__binary_mask is not None:
-            possible_pixels = np.where(self.__binary_mask==True)
+        if self.binary_mask is not None:
+            possible_pixels = np.where(self.binary_mask==True)
             rand_idx = np.random.randint(0, len(possible_pixels[0]))
             random_coords = np.array([[possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]])
             random_coords = np.flip(random_coords, axis=1)
@@ -566,7 +536,7 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.__pipeline_start_file_prefix = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
         # run pipeline
         self.__pipeline_start_time = time.perf_counter()
-        coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(*self.imgs, self.__prevFrames, self.__binary_mask,
+        coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(*self.imgs, self.__prevFrames, self.binary_mask,
                                                                         self.__exinfo, self.__presetROISize,
                                                                         *self.__pipeline_param_vals)
         self.__pipeline_end_time = time.perf_counter()
@@ -911,6 +881,54 @@ class EtCoordTransformHelper():
         """ Launch calibration. """
         self.etMINFLUXController._widget.launchHelpWidget(self.etMINFLUXController._widget.coordTransformWidget, init=True)
 
+
+class BinaryMaskHelper():
+    """ Binary mask help widget controller. """
+    def __init__(self, etMINFLUXController, binaryMaskWidget, *args, **kwargs):
+
+        self.etMINFLUXController = etMINFLUXController
+        self._widget = binaryMaskWidget
+
+        # connect signals from widget
+        self.etMINFLUXController._widget.binaryMaskButton.clicked.connect(self.binaryMaskLaunch)
+        self._widget.recordBinaryMaskButton.clicked.connect(self.initiateBinaryMask)
+        self._widget.resetBinaryMaskButton.clicked.connect(self.resetBinaryMask)
+
+    def binaryMaskLaunch(self):
+        """ Launch calibration. """
+        self.etMINFLUXController._widget.launchHelpWidget(self.etMINFLUXController._widget.binaryMaskWidget, init=True)
+
+    def initiateBinaryMask(self):
+        """ Initiate the process of calculating a binary mask of the region of interest. """
+        self.etMINFLUXController.launchHelpWidget()
+        self._widget.recordBinaryMaskButton.setText('Recording...')
+        self.binary_stack = []
+        imgs = []
+        for _ in range(self.etMINFLUXController.binary_frames):
+            imgs.append(self.etMINFLUXController._preloaded_confocal_data.popleft())
+            self.binary_stack.append(imgs[-1])
+        for img in reversed(imgs):
+            self.etMINFLUXController._preloaded_confocal_data.appendleft(img)
+        self.calculateBinaryMask()
+
+    def resetBinaryMask(self):
+        """ Reset binary mask, back to None. """
+        self.etMINFLUXController.binary_stack = []
+        self.etMINFLUXController.binary_mask = None  # None to consider the whole image
+
+    def calculateBinaryMask(self):
+        """ Calculate the binary mask of the region of interest, using both positive and negative masks. """
+        img_mean = np.mean(self.binary_stack, 0)
+        img_bin_pos = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_smooth_edit.text()))
+        img_bin_neg = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_neg_smooth_edit.text()))
+        img_bin_pos = np.array(img_bin_pos > float(self._widget.bin_thresh_edit.text()))
+        img_bin_neg = np.array(img_bin_neg < float(self._widget.bin_neg_thresh_edit.text()))
+        img_bin_border = np.zeros(np.shape(img_bin_pos))
+        border_size = int(self._widget.bin_border_size_edit.text())
+        img_bin_border[border_size:-border_size, border_size:-border_size] = 1
+        self.etMINFLUXController.binary_mask = np.logical_and(np.logical_and(img_bin_pos, img_bin_neg), img_bin_border)
+        self._widget.recordBinaryMaskButton.setText('Record binary mask')
+        self.etMINFLUXController.setAnalysisHelpImg(self.etMINFLUXController.binary_mask)
 
 class RunMode(enum.Enum):
     Experiment = 1

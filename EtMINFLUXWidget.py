@@ -36,7 +36,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # add all experiment modes in a dropdown list
         self.experimentModes = ['Experiment','TestVisualize','TestValidate']
         self.experimentModesPar = ComboBox()
-        self.experimentModesPar_label = FieldLabel('Experiment mode')
+        self.experimentModesPar_label = FieldLabel('Running mode')
         self.experimentModesPar.addItems(self.experimentModes)
         self.experimentModesPar.setCurrentIndex(0)
         # generate dropdown list for ROI following modes
@@ -53,10 +53,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = PushButton('Load pipeline')
         # create buttons for calibrating coordinate transform, recording binary mask, save current measurement
-        self.coordTransfCalibButton = PushButton('Transform calibration')
-        self.recordBinaryMaskButton = PushButton('Record binary mask')
-        self.resetBinaryMaskButton = PushButton('Reset binary mask')
+        self.coordTransfCalibButton = PushButton('Calibration settings...')
         self.saveCurrentMeasButton = PushButton('Save curr. meas.')
+        self.openGuideButton = PushButton('Open guide...')
+        self.binaryMaskButton = PushButton('Binary mask settings...')
         # creat button for unlocking any softlock happening
         self.softResetButton = PushButton('Soft reset')
         # create check box for endless running mode
@@ -161,11 +161,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.follow_roi_redetectthresh_label = FieldLabel('Redetect dist threshold (px)')
         self.follow_roi_redetectthresh_edit = LineEdit(str(0))
         # create GUI group titles
-        self.saving_title = TitleLabel('Saving')
-        self.binary_title = TitleLabel('Binary mask')
+        self.misc_title = TitleLabel('Transform, calibration, saving, guide, binary mask')
         self.minflux_title = TitleLabel('MINFLUX imaging parameters')
         self.pipeline_title = TitleLabel('Analysis pipeline')
-        self.transform_title = TitleLabel('Coordinate transform and GUI calibration')
         self.follow_ROI_mode_title = TitleLabel('ROI following mode')
         self.analysis_control_title = TitleLabel('Analysis control')
         # create updating info boxes
@@ -175,16 +173,24 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.conf_frame_edit_nullmessage = 'Confocal frames acquired: not running'
         self.conf_frame_edit = LineEdit(self.conf_frame_edit_nullmessage)
         self.conf_frame_edit.setEditable(False)
+        # initiate pipeline parameter field for number of confocal channels
+        self.channels_name = FieldLabel('{}'.format('Req. confocal channels'))
+        self.channels_edit = LineEdit('-')
+        self.channels_edit.setEditable(False)
 
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
+        # help widget for binary mask
+        self.binaryMaskWidget = BinaryMaskWidget(*args, **kwargs)
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
-        self.analysisHelpWidget = AnalysisWidget()#*args, **kwargs)
+        self.analysisHelpWidget = AnalysisWidget()
         # help widget for showing coords list
         self.coordListWidget = CoordListWidget(*args, **kwargs)
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
         # help widget for event viewing
         self.eventViewWidget = EventWidget()
+        # help widget for displaying guide
+        self.guideWidget = GuideWidget()
 
         # create grid and grid layout
         self.grid = QtWidgets.QGridLayout()
@@ -196,42 +202,18 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.endlessScanCheck, currentRow, 1)
         self.grid.addWidget(self.experimentModesPar_label, currentRow, 2)
         self.grid.addWidget(self.experimentModesPar, currentRow, 3)
-        self.grid.addWidget(self.softResetButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.pipeline_title, currentRow, 0, 1, 2)
-        self.grid.addWidget(self.transform_title, currentRow, 2, 1, 3)
+        self.grid.addWidget(self.minflux_title, currentRow, 2, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.loadPipelineButton, currentRow, 0)
         self.grid.addWidget(self.analysisPipelinePar, currentRow, 1)
-        self.grid.addWidget(self.transformPipelineLabel, currentRow, 2)
-        self.grid.addWidget(self.transformPipelinePar, currentRow, 3)
-        self.grid.addWidget(self.coordTransfCalibButton, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.binary_title, currentRow, 2, 1, 3)
-        currentRow += 1
-        self.grid.addWidget(self.bin_smooth_label, currentRow, 2)
-        self.grid.addWidget(self.bin_smooth_edit, currentRow, 3)
-        self.grid.addWidget(self.recordBinaryMaskButton, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.bin_thresh_label, currentRow, 2)
-        self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
-        self.grid.addWidget(self.resetBinaryMaskButton, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.bin_neg_smooth_label, currentRow, 2)
-        self.grid.addWidget(self.bin_neg_smooth_edit, currentRow, 3)
-        currentRow += 1
-        self.grid.addWidget(self.bin_neg_thresh_label, currentRow, 2)
-        self.grid.addWidget(self.bin_neg_thresh_edit, currentRow, 3)
-        currentRow += 1
-        self.grid.addWidget(self.bin_border_size_label, currentRow, 2)
-        self.grid.addWidget(self.bin_border_size_edit, currentRow, 3)
-        currentRow += 1
-        self.grid.addWidget(self.minflux_title, currentRow, 2, 1, 3)
-        currentRow += 1
         self.grid.addWidget(self.mfxth0_seq_label, currentRow, 2)
         self.grid.addWidget(self.mfxth0_seq_par, currentRow, 3)
         self.grid.addWidget(self.twoThreadsMFXCheck, currentRow, 4)
         currentRow += 1
+        self.grid.addWidget(self.channels_name, currentRow, 0)
+        self.grid.addWidget(self.channels_edit, currentRow, 1)
         self.grid.addWidget(self.mfxth0_exc_laser_label, currentRow, 2)
         self.grid.addWidget(self.mfxth0_exc_laser_par, currentRow, 3)
         currentRow += 1
@@ -271,37 +253,44 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.mfx_rectime_label, currentRow, 2)
         self.grid.addWidget(self.mfx_rectime_edit, currentRow, 3)
         self.grid.addWidget(self.presetMfxRecTimeCheck, currentRow, 4)
-        currentRow += 1
+        currentRow += 20  # arbitrary large enough number, to separate sections when loading pipelines with many parameters
         self.grid.addWidget(self.follow_ROI_mode_title, currentRow, 2, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.analysis_control_title, currentRow, 0, 1, 2)
         self.grid.addWidget(self.roiFollowingModesPar_label, currentRow, 2)
         self.grid.addWidget(self.roiFollowingModesPar, currentRow, 3)
         self.grid.addWidget(self.followROIModeCheck, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.lines_analysis_label, currentRow, 0)
-        self.grid.addWidget(self.lines_analysis_edit, currentRow, 1)
         self.grid.addWidget(self.follow_roi_interval_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_interval_edit, currentRow, 3)
         currentRow += 1
-        self.grid.addWidget(self.plotROICheck, currentRow, 0)
-        self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 1)
+        self.grid.addWidget(self.analysis_control_title, currentRow, 0, 1, 2)
         self.grid.addWidget(self.follow_roi_redetectthresh_label, currentRow, 2)
         self.grid.addWidget(self.follow_roi_redetectthresh_edit, currentRow, 3)
         currentRow += 1
+        self.grid.addWidget(self.lines_analysis_label, currentRow, 0)
+        self.grid.addWidget(self.lines_analysis_edit, currentRow, 1)
+        self.grid.addWidget(self.misc_title, currentRow, 2, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.plotROICheck, currentRow, 0)
+        self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 1)
+        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 2)
+        self.grid.addWidget(self.autoSaveCheck, currentRow, 3)
+        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
+        currentRow += 1
         self.grid.addWidget(self.init_frames_label, currentRow, 0)
         self.grid.addWidget(self.init_frames_edit, currentRow, 1)
-        self.grid.addWidget(self.saving_title, currentRow, 2, 1, 3)
+        self.grid.addWidget(self.openGuideButton, currentRow, 2)
+        self.grid.addWidget(self.coordTransfCalibButton, currentRow, 3)
+        self.grid.addWidget(self.binaryMaskButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
         self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
-        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 3)
-        self.grid.addWidget(self.autoSaveCheck, currentRow, 4)
+        self.grid.addWidget(self.transformPipelineLabel, currentRow, 2)
+        self.grid.addWidget(self.transformPipelinePar, currentRow, 3)
         currentRow += 1
         self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
-        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.conf_frame_edit, currentRow, 2, 1, 2)
+        self.grid.addWidget(self.softResetButton, currentRow, 4)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
@@ -342,17 +331,17 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         if activation_lasers_present:
             self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
 
-    def initParamFields(self, parameters: dict, params_exclude: list):
+    def initParamFields(self, parameters: dict, params_exclude: list, conf_channels: int):
         """ Initialized event-triggered analysis pipeline parameter fields. """
         # remove previous parameter fields for the previously loaded pipeline
         for param in self.param_names:
             self.grid.removeWidget(param)
         for param in self.param_edits:
             self.grid.removeWidget(param)
-
-        # initiate parameter fields for all the parameters in the pipeline chosen
-        currentRow = 3
         
+        currentRow = 4
+        self.channels_edit.setText(str(conf_channels))
+        # initiate parameter fields for all the parameters in the pipeline chosen
         self.param_names = list()
         self.param_edits = list()
         for pipeline_param_name, pipeline_param_val in parameters.items():
@@ -786,6 +775,96 @@ class CoordTransformWidget(QtWidgets.QWidget):
     
     def setSaveFolderField(self, folder):
         self.save_dir_edit.setText(folder)
+
+
+class BinaryMaskWidget(QtWidgets.QWidget):
+    """ Pop-up widget for controlling the optional binary mask for analysis restriction. """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # set graphic style of widget
+        self.setStyleSheet('background-color: rgb(70,70,70);')
+
+        # create title
+        self.binary_title = TitleLabel('Binary mask')
+        # create buttons
+        self.recordBinaryMaskButton = PushButton('Record binary mask')
+        self.resetBinaryMaskButton = PushButton('Reset binary mask')
+        # create editable fields for binary mask calculation threshold and smoothing
+        self.bin_thresh_label = FieldLabel('Bin. pos. threshold (cnts)')
+        self.bin_thresh_edit = LineEdit(str(0))
+        self.bin_smooth_label = FieldLabel('Bin. pos. smooth (px)')
+        self.bin_smooth_edit = LineEdit(str(0))
+        self.bin_neg_thresh_label = FieldLabel('Bin. neg. threshold (cnts)')
+        self.bin_neg_thresh_edit = LineEdit(str(0))
+        self.bin_neg_smooth_label = FieldLabel('Bin. neg. smooth (px)')
+        self.bin_neg_smooth_edit = LineEdit(str(0))
+        self.bin_border_size_label = FieldLabel('Bin. border size (px)')
+        self.bin_border_size_edit = LineEdit(str(0))
+
+        # generate GUI layout
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+    
+        currentRow = 0
+        self.grid.addWidget(self.binary_title, currentRow, 2, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_smooth_label, currentRow, 2)
+        self.grid.addWidget(self.bin_smooth_edit, currentRow, 3)
+        self.grid.addWidget(self.recordBinaryMaskButton, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.bin_thresh_label, currentRow, 2)
+        self.grid.addWidget(self.bin_thresh_edit, currentRow, 3)
+        self.grid.addWidget(self.resetBinaryMaskButton, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.bin_neg_smooth_label, currentRow, 2)
+        self.grid.addWidget(self.bin_neg_smooth_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_neg_thresh_label, currentRow, 2)
+        self.grid.addWidget(self.bin_neg_thresh_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.bin_border_size_label, currentRow, 2)
+        self.grid.addWidget(self.bin_border_size_edit, currentRow, 3)
+        
+        frame_gm = self.frameGeometry()
+        topLeftPoint = QPoint(0,670)
+        frame_gm.moveTopLeft(topLeftPoint)
+        self.move(frame_gm.topLeft())
+
+
+class GuideWidget(QtWidgets.QWidget):
+    """ Pop-up widget for displaying the etMINFLUX experiment guide. """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # set graphic style of widget
+        self.setStyleSheet('background-color: rgb(70,70,70);')
+
+        # create text browser
+        self.textBrowser = QtWidgets.QTextBrowser()
+        self.textBrowser.setStyleSheet('background-color: rgb(200,200,200)')
+
+        # generate GUI layout
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        
+        self.setWindowTitle('etMINFLUX guide')
+    
+        currentRow = 0
+        self.grid.addWidget(self.textBrowser, currentRow, 0, 1, 3)
+        
+        frame_gm = self.frameGeometry()
+        topLeftPoint = QPoint(0,670)
+        frame_gm.moveTopLeft(topLeftPoint)
+        self.move(frame_gm.topLeft())
+
+    def setText(self, text=None, source=None):
+        if text != None:
+            self.textBrowser.setText(text)
+        elif source != None:
+            self.textBrowser.setSource(source)
 
 
 # Copyright (C) 2023-2025 Jonatan Alvelid
