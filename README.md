@@ -1,6 +1,6 @@
-::: warning
-**Note that this branch works with the latest Imspector version m2410 and its specpy version. For use with earlier Imspector version m2205, see corresponding branch.**
-:::
+___
+## **Note that this branch works with the latest Imspector version m2410 and its specpy version. For use with earlier Imspector version m2205, see corresponding branch.**
+___
 
 # etMINFLUX
 Event-triggered MINFLUX controller, written to interact with the abberior Imspector software, in turn controlling a MINFLUX microscope also capable of running confocal imaging. 
