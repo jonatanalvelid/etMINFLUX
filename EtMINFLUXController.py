@@ -1249,6 +1249,13 @@ class EtMINFLUXController(QtCore.QObject):
         cfg = meas.configuration(self.__conf_config)
         meas.activate(cfg)
 
+    def bufferLatestImages(self):
+        # buffer latest fast frame and (if applicable) validation images
+        self.__prevFrames.append(np.copy(self.img))
+        # buffer previous preprocessed analysis frame
+        if self.__img_ana is not None:
+            self.__prevAnaFrames.append(np.copy(self.__img_ana))
+
     def acquireMINFLUXFull(self, coords_scan, roi_size, logging=True):
         """ Full MINFLUX acquisition function. """
         # pause fast imaging
