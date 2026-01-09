@@ -1,3 +1,7 @@
+___
+## **Note that this branch works with Imspector version m2205 and its specpy version. For use with latest Imspector version m2410, see the main branch. If simulation mode, and therefore no specpy, is required, use the main branch to run in simulation mode for optimizing analysis pipelines. If optimized analysis pipelines should be used in the m2205 version, compare the callsign with other analysis pipelines found on this branch, and adjust the optimized pipelines' callsign accordingly. If two-color or three-color pipelines should be used in this version, include _dualcolor or _triplecolor, respectively, in the names of the pipelines (function name and file/module name). **
+___
+
 # etMINFLUX
 Event-triggered MINFLUX controller, written to interact with the abberior Imspector software, in turn controlling an Abberior MINFLUX microscope also capable of running confocal imaging. 
 
