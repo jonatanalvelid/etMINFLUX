@@ -31,8 +31,8 @@
                                             "[\"DET3\",\"DET5\"]"]
     },
     "timing_settings": {
-        "sleep_time_base": 0.3,
-        "sleep_time_roiswitch": 1.0,
+        "sleep_time_base": 0.5,
+        "sleep_time_roiswitch": 1.5,
         "sleep_time_save": 3.0
     },
     "gui_settings": {
