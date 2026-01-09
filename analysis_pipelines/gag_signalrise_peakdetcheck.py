@@ -7,7 +7,7 @@ import cv2
 
 
 def gag_signalrise_peakdetcheck(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                     num_peaks=300, thresh_abs_lo=1.7, thresh_abs_hi=10):
+                     num_peaks=200, thresh_abs_lo=3, thresh_abs_hi=60):
 
     """
     Analysis pipeline to be used for the visualize testing mode, that only performs the peak detection,

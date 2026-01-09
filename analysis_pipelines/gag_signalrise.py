@@ -17,10 +17,9 @@ def f(x, A, B):
     return A*x + B
 
 def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                     min_dist_appear=5, num_peaks=300, thresh_abs_lo=1.7, thresh_abs_hi=10, finalintlo=0.75, 
-                     finalinthi=5, border_limit=10, memory_frames=6, track_search_dist=10, frames_appear=4, 
-                     thresh_intincratio=1.3, thresh_intincratio_max=15, intincslope=0.1, thresh_move_dist=1.3):
-    
+                     min_dist_appear=5, num_peaks=200, thresh_abs_lo=3.0, thresh_abs_hi=60, finalintlo=0.75, 
+                     finalinthi=50, border_limit=10, memory_frames=6, track_search_dist=10, frames_appear=5, 
+                     thresh_intincratio=1.25, thresh_intincratio_max=15, intincslope=0.07, thresh_move_dist=1.8):
     """ 
     Analysis pipeline that detects a slowly increasing spot-like signal (0-maximum intensity inside ~10-20 frames),
     used for detecting slow accumulation of gag signal, with a low confocal frame rate, at potential virus budding sites.
@@ -29,6 +28,7 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     img - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
+    testmode - to return preprocessed image or not
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
 
     Pipeline specific parameters:
@@ -50,6 +50,7 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     """
     
     roi_sizes = False
+    prevframes_allowed = 1  # how many frames a particle is allowed to be present in the range of frames previous to the investigated appearance
 
     # define non-adjustable parameters
     smoothing_radius_raw = 1.5  # pixels
@@ -133,13 +134,13 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
                 tracks_prebefore = tracks_all[tracks_all['t']<timepoint-2*frames_appear]
             tracks_before = tracks_all[(tracks_all['t']<timepoint-frames_appear) & (tracks_all['t']>=timepoint-2*frames_appear)]
             if timepoint >= 3*frames_appear:
-                particle_ids_before = np.unique(tracks_prebefore['particle'])  # take older frames as check
+                particle_ids_before, ids_before_counts = np.unique(tracks_prebefore['particle'], return_counts=True)  # take older frames (before 2*frames_appear) as check - allowing something to appear between frames_appear and 2*frames_appear ago, and further checks to happen for frames_appear frames after first appearance
             else:
-                particle_ids_before = np.unique(tracks_before['particle'])  # take last frames_appear as check
+                particle_ids_before, ids_before_counts = np.unique(tracks_before['particle'], return_counts=True)  # take frames between frames_appear and 2*frames_appear ago as check
             for _, track in tracks_timepoint.iterrows():
                 # check for appearing tracks, at 1x frames_appear to 3x frames_appear ago
                 particle_id = int(track['particle'])
-                if particle_id not in particle_ids_before:
+                if (particle_id not in particle_ids_before) or (ids_before_counts[np.where(particle_ids_before==particle_id)[0][0]] < prevframes_allowed + 1):
                     # check that it stays for at least thresh_stayframes frames
                     track_self_after = tracks_after[tracks_after['particle']==particle_id]
                     if len(track_self_after) >= thresh_stayframes:
@@ -150,6 +151,8 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
                         particle_dists = [eucl_dist((int(track_appearance['x']),int(track_appearance['y'])),(int(x2),int(y2))) for x2,y2 in zip(other_tracks_appearance['x'],other_tracks_appearance['y'])]
                         if np.min(particle_dists) > min_dist_appear:
                             track_self_before = tracks_before[tracks_before['particle']==particle_id]
+                            xev = track_self_after.iloc[-1]['x']
+                            yev = track_self_after.iloc[-1]['y']
                             # check that intensity of spot increases over the thresh_stay frames with at least thresh_intincratio
                             track_self = track_self_after.tail(1)
                             prev_frames = np.array(prev_frames).astype('float32')
@@ -182,7 +185,6 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
                                 track_intensity_all = np.concatenate((track_intensity_before, np.array([tracks_timepoint[tracks_timepoint['particle']==particle_id]['intensity'].iloc[0]]), track_intensity_after)).tolist()
                                 x = np.linspace(0,len(track_intensity_all)-1,len(track_intensity_all))
                                 sigma = np.ones(len(x))
-                                sigma[[0]] = 0.01
                                 popt, _ = curve_fit(f, x, track_intensity_all, sigma=sigma)
                                 if popt[0] > intincslope:
                                     # check that final intensity of track is at least above finalint

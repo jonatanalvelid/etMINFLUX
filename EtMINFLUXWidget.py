@@ -3,12 +3,13 @@ import os
 import pyqtgraph as pg
 import numpy as np
 import matplotlib.figure as mplfig
-
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QPoint
+
 from tkinter import TkVersion
 from tkinter.filedialog import askdirectory
+
 from guielements import *
 
 
@@ -38,13 +39,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.experimentModesPar = ComboBox()
         self.experimentModesPar_label = FieldLabel('Experiment mode')
         self.experimentModesPar.addItems(self.experimentModes)
-        self.experimentModesPar.setCurrentIndex(0)
+        self.experimentModesPar.setCurrentIndex(1)
         # generate dropdown list for ROI following modes
-        self.roiFollowingModes = ['Single','SingleRedetect','Multiple']
+        self.roiFollowingModes = ['Single','SingleRedetect','Multiple','MultipleDetect']
         self.roiFollowingModesPar = ComboBox()
         self.roiFollowingModesPar_label = FieldLabel('ROI following mode')
         self.roiFollowingModesPar.addItems(self.roiFollowingModes)
-        self.roiFollowingModesPar.setCurrentIndex(0)
+        self.roiFollowingModesPar.setCurrentIndex(3)
         # create lists for current pipeline parameters: labels and editable text fields
         self.param_names = list()
         self.param_edits = list()
@@ -52,11 +53,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton = PushButton('Initiate etMINFLUX')
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = PushButton('Load pipeline')
-        # create buttons for calibrating coordinate transform, recording binary mask, save current measurement
+        # create buttons for calibrating coordinate transform, recording binary mask, save current measurement, and start a multiple event detection ROI following experiment manually
         self.coordTransfCalibButton = PushButton('Transform calibration')
         self.recordBinaryMaskButton = PushButton('Record binary mask')
         self.resetBinaryMaskButton = PushButton('Reset binary mask')
         self.saveCurrentMeasButton = PushButton('Save curr. meas.')
+        self.startMFXPhaseButton = PushButton('Start MFX phase')
         # creat button for unlocking any softlock happening
         self.softResetButton = PushButton('Soft reset')
         # create check box for endless running mode
@@ -79,18 +81,18 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.autoSaveCheck = CheckBox('Auto-save .msr after event')
         self.autoSaveCheck.setChecked(True)
         self.autoDeleteMFXDatasetCheck = CheckBox('Auto-delete mfx data after save')
-        self.autoDeleteMFXDatasetCheck.setChecked(True)
+        self.autoDeleteMFXDatasetCheck.setChecked(False)
         # create check box for plotting ROI even in experiment mode
         self.plotROICheck = CheckBox('Plot ROI (experiment mode)')
         # create check box for confocal monitoring pausing between frames
         self.confocalFramePauseCheck = CheckBox('Confocal frame pause (s)')
         # create editable fields for binary mask calculation threshold and smoothing
         self.bin_thresh_label = FieldLabel('Bin. pos. threshold (cnts)')
-        self.bin_thresh_edit = LineEdit(str(10))
+        self.bin_thresh_edit = LineEdit(str(0.1))
         self.bin_smooth_label = FieldLabel('Bin. pos. smooth (px)')
         self.bin_smooth_edit = LineEdit(str(2))
         self.bin_neg_thresh_label = FieldLabel('Bin. neg. threshold (cnts)')
-        self.bin_neg_thresh_edit = LineEdit(str(10))
+        self.bin_neg_thresh_edit = LineEdit(str(5))
         self.bin_neg_smooth_label = FieldLabel('Bin. neg. smooth (px)')
         self.bin_neg_smooth_edit = LineEdit(str(2))
         self.bin_border_size_label = FieldLabel('Bin. border size (px)')
@@ -100,11 +102,11 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.init_frames_edit = LineEdit(str(0))
         # create editable fields for MFX acquisition parameters
         self.size_x_label = FieldLabel('MFX ROI size X (µm)')
-        self.size_x_edit = LineEdit(str(2))
+        self.size_x_edit = LineEdit(str(0.7))
         self.size_y_label = FieldLabel('MFX ROI size Y (µm)')
-        self.size_y_edit = LineEdit(str(2))
+        self.size_y_edit = LineEdit(str(0.7))
         self.mfx_rectime_label = FieldLabel('MFX ROI rec time (s)')
-        self.mfx_rectime_edit = LineEdit(str(60))
+        self.mfx_rectime_edit = LineEdit(str(30))
         self.mfx_exc_laser_label = FieldLabel('MFX exc laser')
         self.mfx_exc_laser = list()
         self.mfx_exc_laser_par = ComboBox()
@@ -122,9 +124,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.conf_frame_pause_edit.setEditable(False)
         # create editable fields for ROI following mode
         self.follow_roi_interval_label = FieldLabel('Confocal interval (s)')
-        self.follow_roi_interval_edit = LineEdit(str(60))
+        self.follow_roi_interval_edit = LineEdit(str(30))
         self.follow_roi_redetectthresh_label = FieldLabel('Redetect dist threshold (px)')
         self.follow_roi_redetectthresh_edit = LineEdit(str(20))
+        self.multiple_detect_window_label = FieldLabel('Multiple event detection window (min)')
+        self.multiple_detect_window_edit = LineEdit(str(15))
+        self.mfx_phase_eventlim_label = FieldLabel('MultiDetect events to start MFX phase')
+        self.mfx_phase_eventlim_edit = LineEdit(str(500))
         # create GUI group titles
         self.saving_title = TitleLabel('Saving')
         self.binary_title = TitleLabel('Binary mask')
@@ -144,10 +150,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # help widget for coordinate transform
         self.coordTransformWidget = CoordTransformWidget(*args, **kwargs)
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
-        self.analysisHelpWidget = AnalysisWidget()#*args, **kwargs)
+        self.analysisHelpWidget = AnalysisWidget('Analysis run')#*args, **kwargs)
+        self.multiMFXROIHelpWidget = AnalysisWidget('Multi MFX ROI')#*args, **kwargs)
         # help widget for showing coords list
         self.coordListWidget = CoordListWidget(*args, **kwargs)
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
+        self.multiMFXROIcoordListWidget = CoordListWidget(*args, **kwargs)
+        self.multiMFXROIHelpWidget.addWidgetRight(self.multiMFXROIcoordListWidget)
         # help widget for event viewing
         self.eventViewWidget = EventWidget()
 
@@ -237,27 +246,38 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.init_frames_label, currentRow, 0)
         self.grid.addWidget(self.init_frames_edit, currentRow, 1)
-        self.grid.addWidget(self.saving_title, currentRow, 2, 1, 3)
+        self.grid.addWidget(self.multiple_detect_window_label, currentRow, 2)
+        self.grid.addWidget(self.multiple_detect_window_edit, currentRow, 3)
+        self.grid.addWidget(self.startMFXPhaseButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
         self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
+        self.grid.addWidget(self.mfx_phase_eventlim_label, currentRow, 2)
+        self.grid.addWidget(self.mfx_phase_eventlim_edit, currentRow, 3)
+        currentRow += 1
+        self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.saving_title, currentRow, 2, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
         self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 3)
         self.grid.addWidget(self.autoSaveCheck, currentRow, 4)
         currentRow += 1
-        self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
         self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
 
-    def resetHelpWidget(self):
-        self.analysisHelpWidget = AnalysisWidget()
+    def resetHelpWidgets(self):
+        # create help widgets for showing the analysis results, and list all detected ROIs in one analysis run
+        self.analysisHelpWidget = AnalysisWidget('Analysis run')
         self.coordListWidget = CoordListWidget()
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
+        # create help widgets for showing and listing all MFX ROIs that currently are planned to being looped through in a multi MFX ROI experiments (following or single loop)
+        self.multiMFXROIHelpWidget = AnalysisWidget('Multi MFX ROI')
+        self.multiMFXROIcoordListWidget = CoordListWidget()
+        self.multiMFXROIHelpWidget.addWidgetRight(self.multiMFXROIcoordListWidget)
 
     def resetEventViewWidget(self):
         self.eventViewWidget = EventWidget()
@@ -312,7 +332,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         """ Set combobox with available minflux sequences to use. """
         self.mfx_seqs = mfxSeqs
         self.mfx_seq_par.addItems(self.mfx_seqs)
-        self.mfx_seq_par.setCurrentIndex(0)
+        self.mfx_seq_par.setCurrentIndex(5)
 
     def setMinfluxExcLaserList(self, excLasers):
         """ Set combobox with available excitation lasers to use. """
@@ -336,11 +356,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
 class AnalysisWidget(QtWidgets.QWidget):
     """ Pop-up widget for the live analysis images or binary masks. """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, title, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
+        self.setWindowTitle(title)
 
         self.imgVbWidget = pg.GraphicsLayoutWidget()
         self.imgVb = pg.PlotItem(axisItems={'left': pg.AxisItem('left'), 'bottom': pg.AxisItem('bottom')})
@@ -402,6 +423,12 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def addWidgetRight(self, widget):
         self.grid.addWidget(widget, 1, 7, 1, 1)
+        self.helpcoordwidget = widget
+
+    def reset(self):
+        self.removeROIs()
+        self.img.setImage(np.zeros((100,100)), autoLevels=False)
+        self.helpcoordwidget.clearList()
 
 
 class EventWidget(QtWidgets.QWidget):
@@ -416,27 +443,28 @@ class EventWidget(QtWidgets.QWidget):
         # Create image viewer and intensity graph widgets
         self.image_viewer = StackViewerWidget(self)
         self.intensity_graph = IntensityGraphWidget(self)
+
+        # generate dropdown list for detected events
+        self.eventIndexes = []
+        self.eventsPar = ComboBox()
+        self.eventsPar.addItems(self.eventIndexes)
+        self.eventsPar.setCurrentIndex(0)  # TODO: have to check if this works
         
         # Create a grid layout and add widgets
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
-        self.grid.addWidget(self.image_viewer, 0, 0)
-        self.grid.addWidget(self.intensity_graph, 0, 1)
+        self.grid.addWidget(self.eventsPar, 0, 0)
+        self.grid.addWidget(self.image_viewer, 1, 0)
+        self.grid.addWidget(self.intensity_graph, 1, 1)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QPoint(0,970)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
-        
-    def add_frame_and_intensity(self, image, intensity):
-        # Add frame to image viewer and update intensity trace
-        self.image_viewer.add_frame(image)
-        # Update intensity graph with the full trace
-        self.intensity_graph.update_plot_postevent(intensity)
 
-    def add_event(self, image_stack, intensity_trace):
+    def add_event(self, image_stack, intensity_trace, event_frame):
         self.image_viewer.add_frames_event(image_stack)
-        self.intensity_graph.update_plot_event(intensity_trace)
+        self.intensity_graph.update_plot_event(intensity_trace, event_frame)
 
     def reset(self):
         self.image_viewer.reset()
@@ -468,31 +496,23 @@ class IntensityGraphWidget(QtWidgets.QWidget):
 
         self.reset()
         
-    def update_plot(self):
+    def update_plot(self, event_frame, intensity_trace):
         self.ax.clear()
         # plot vertical lines for event
-        self.ax.axvline(x=self.event_frame, linewidth=4, color='g', alpha=0.6)
-        self.ax.plot(self.intensity_trace, 'r-')
+        self.ax.axvline(x=event_frame, linewidth=4, color='g', alpha=0.6)
+        self.ax.plot(intensity_trace, 'r-')
         self.ax.set_title("Event area intensity")
         self.ax.set_xlabel("Frame")
         self.ax.set_ylabel("Intensity")
+        lims = [0, np.max(intensity_trace)*1.3 if len(intensity_trace)>0 else 1]
+        self.ax.set_ylim(*lims)
         self.canvas.draw()
 
-    def update_plot_event(self, intensity_trace):
-        if len(intensity_trace) == 1:
-            self.event_frame = 0
-        else:
-            self.event_frame = len(intensity_trace)
-        self.intensity_trace = intensity_trace
-        self.update_plot()
-
-    def update_plot_postevent(self, intensity_trace):
-        self.intensity_trace = intensity_trace
-        self.update_plot()
+    def update_plot_event(self, intensity_trace, event_frame):
+        self.update_plot(event_frame, intensity_trace)
 
     def reset(self):
-        self.event_frame = None
-        self.intensity_trace = []
+        self.update_plot(0,[])
 
 
 class StackViewerWidget(QtWidgets.QWidget):
@@ -556,15 +576,13 @@ class StackViewerWidget(QtWidgets.QWidget):
 
         self.reset()
 
-    def add_frame(self, frame):
-        self.stack.append(frame)
-        self.slider.setMaximum(len(self.stack) - 1)
-        self.update_display()
-
     def add_frames_event(self, frames):
         self.reset()
-        for frame in frames:
-            self.stack.append(frame)
+        if len(np.shape(frames)) > 2:
+            for frame in frames:
+                self.stack.append(frame)
+        else:
+            self.stack.append(frames)
         self.slider.setMaximum(len(self.stack) - 1)
         self.update_display()
 
@@ -603,6 +621,8 @@ class CoordListWidget(QtWidgets.QWidget):
         self.list = QtWidgets.QListWidget()
         self.list.setVerticalScrollMode(QtWidgets.QListWidget.ScrollPerPixel)
 
+        self.roi_ids = []
+
         # create widget fields for the ROI list
         self.delROIButton = PushButton('Delete ROI')
         self.numevents_edit_nullmessage = 'Number of detected events: not running'
@@ -616,22 +636,29 @@ class CoordListWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.numevents_edit, 1, 0)
         self.grid.addWidget(self.list, 2, 0)
 
-    def addCoords(self, coord_list, roi_sizes, colors):
+    def addCoords(self, coord_list, roi_sizes, eventids, colors):
         self.clearList()
-        for coord, roi_size, color in zip(coord_list, roi_sizes, colors):
-            self.addCoord(coord, roi_size, color)
+        #roi_id = 0
+        for coord, roi_size, eventid, color in zip(coord_list, roi_sizes, eventids, colors):
+            self.addCoord(coord, roi_size, color, eventid)
+            #roi_id += 1
 
-    def addCoord(self, coord, roi_size, color):
-        listitem = QtWidgets.QListWidgetItem(f'Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
+    def addCoord(self, coord, roi_size, color, roi_id):
+        listitem = QtWidgets.QListWidgetItem(f'Id: {roi_id}, Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
         self.list.addItem(listitem)
+        self.roi_ids.append(roi_id)
 
     def deleteCoord(self, idx):
-        self.list.takeItem(0)
+        roiid_delete = int(self.list.item(idx).text().split(', Pos')[0].split('d: ')[1])
+        self.list.takeItem(idx)
+        self.roi_ids.pop(self.roi_ids.index(roiid_delete))
+        return roiid_delete
 
     def clearList(self):
         last_item = True
         while last_item is not None:
             last_item = self.list.takeItem(0)
+        self.roi_ids = []
 
 
 class CoordTransformWidget(QtWidgets.QWidget):
@@ -751,16 +778,13 @@ class CoordTransformWidget(QtWidgets.QWidget):
         topLeftPoint = QPoint(0,670)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
-        
-        self.__calibNameSuffix = '_transformParams.txt'
 
     def setCalibrationList(self, calibrationsDir):
         """ Set combobox with available coordinate transformations to use. """
         for transform in os.listdir(calibrationsDir):
             if os.path.isfile(os.path.join(calibrationsDir, transform)):
-                if self.__calibNameSuffix in transform:
-                    transform = transform.split('.')[0].split('_')[0]
-                    self.transformCalibrations.append(transform)
+                transform = transform.split('.')[0].split('_')[0]
+                self.transformCalibrations.append(transform)
         self.transformCalibrations = list(reversed(self.transformCalibrations))
         self.transformCalibrationsPar.addItems(self.transformCalibrations)
         self.transformCalibrationsPar.setCurrentIndex(0)
@@ -778,7 +802,7 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.save_dir_edit.setText(folder)
 
 
-# Copyright (C) 2023-2025 Jonatan Alvelid
+# Copyright (C) 2023-2026 Jonatan Alvelid
 #
 # EtMINFLUX is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
