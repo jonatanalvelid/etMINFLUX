@@ -160,3 +160,5 @@ cython_debug/
 #.idea/
 testing.ipynb
 *.whl
+specpy-1.2.3-cp310-cp310-win_amd64.whl
+testing.py

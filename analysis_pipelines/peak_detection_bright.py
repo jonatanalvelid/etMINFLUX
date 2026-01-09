@@ -4,7 +4,7 @@ from skimage import measure
 import cv2
 import math
 
-def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+def peak_detection_bright(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                           maxfilter_kersize=5, peak_min_dist=30, thresh_abs=7, num_peaks=25, smoothing_radius=1, 
                           border_limit=15, init_smooth=1, roi_border=5, roi_th_factor=6):
     
@@ -12,7 +12,7 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, 
     Pipeline to detect peaks in an image of bright objects, using a maximum intensity detection filter.
     
     Common parameters:
-    img - current image,
+    img_ch1 - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
     testmode - to return preprocessed image or not
@@ -30,20 +30,20 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, 
     """
     roi_sizes = False
 
-    if binary_mask is None or np.shape(binary_mask) != np.shape(img):
-        binary_mask = np.ones(np.shape(img)).astype('uint16')
+    if binary_mask is None or np.shape(binary_mask) != np.shape(img_ch1):
+        binary_mask = np.ones(np.shape(img_ch1)).astype('uint16')
 
-    img = np.array(img).astype('float32')
+    img_ch1 = np.array(img_ch1).astype('float32')
     if len(prev_frames) != 0:
         prev_frame = np.array(prev_frames[0]).astype('float32')
     else:
-        prev_frame = np.zeros(np.shape(img)).astype('float32')
+        prev_frame = np.zeros(np.shape(img_ch1)).astype('float32')
     if init_smooth==1:
-        img = ndi.gaussian_filter(img, smoothing_radius)
+        img_ch1 = ndi.gaussian_filter(img_ch1, smoothing_radius)
         prev_frame = ndi.gaussian_filter(prev_frame, smoothing_radius)
 
     # multiply with binary mask
-    img_ana = img * np.array(binary_mask)
+    img_ana = img_ch1 * np.array(binary_mask)
 
     # Peak_local_max as a combo of opencv and numpy
     size = int(2 * maxfilter_kersize + 1)
@@ -65,7 +65,7 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, 
     coordinates = np.transpose(coordinates)[idx_maxsort]
 
     # remove everything on the border
-    imsize = np.shape(img)[0]
+    imsize = np.shape(img_ch1)[0]
     idxremove = []
     for idx, coordpair in enumerate(coordinates):
         if coordpair[0] < border_limit or coordpair[0] > imsize - border_limit or coordpair[1] < border_limit or coordpair[1] > imsize - border_limit:
@@ -93,8 +93,8 @@ def peak_detection_bright(img, prev_frames=None, binary_mask=None, exinfo=None, 
         roi_sizes = []
         cut_size = 50
         for coords in coordinates:
-            img_cut = img[coords[0]-int(cut_size/2):coords[0]+int(cut_size/2), coords[1]-int(cut_size/2):coords[1]+int(cut_size/2)]
-            peak_val = img[coords[0],coords[1]]
+            img_cut = img_ch1[coords[0]-int(cut_size/2):coords[0]+int(cut_size/2), coords[1]-int(cut_size/2):coords[1]+int(cut_size/2)]
+            peak_val = img_ch1[coords[0],coords[1]]
             img_cut_mask = img_cut > peak_val/roi_th_factor
             labels_mask = measure.label(img_cut_mask)
             regions = measure.regionprops(labels_mask)

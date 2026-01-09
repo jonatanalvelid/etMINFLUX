@@ -12,7 +12,7 @@ tp.quiet()
 def eucl_dist(a,b):
     return np.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2)
 
-def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+def dyn_signalrise(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                      min_dist=1, num_peaks=1000, thresh_abs_lo=1.1, thresh_abs_hi=15, border_limit=15,
                      memory_frames=10, track_search_dist=6, frames_appear=6, thresh_intincratio=1.2, 
                      thresh_intincratio_max=5.0, thresh_move_dist=1.5):
@@ -22,7 +22,7 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     used for detecting fast accumulation of dynamin1 signal at endocytic sites.
     
     Common parameters:
-    img - current image,
+    img_ch1 - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
     testmode - to return preprocessed image or not
@@ -55,8 +55,8 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     thresh_stayframes = int(frames_appear)-1
     
     # gaussian filter raw image
-    img = np.array(img).astype('float32')
-    img_filt = ndi.gaussian_filter(img, smoothing_radius)
+    img_ch1 = np.array(img_ch1).astype('float32')
+    img_filt = ndi.gaussian_filter(img_ch1, smoothing_radius)
 
     # difference of gaussians to get clear peaks separated from spread-out bkg and noise
     img_dog_lo = ndi.gaussian_filter(img_filt, dog_lo)
@@ -65,8 +65,11 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     img_dog = np.clip(img_dog, a_min=0, a_max=30000)
 
     # further filtering to get a better image for peak detection
-    #img_ana = img_dog * binary_mask
-    img_ana = img_dog.astype('float32')
+    if binary_mask is None:
+        img_ana = img_dog.astype('float32')
+    else:
+        img_ana = img_dog * binary_mask
+        img_ana = img_ana.astype('float32')
     img_ana = ndi.gaussian_filter(img_ana, smoothing_radius)  # Gaussian filter the image, to remove noise, to get a better center estimate
     # Peak_local_max all-in-one as a combo of opencv and cupy
     # get filter structuring element
@@ -98,7 +101,7 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     # extract intensities summed around each coordinate
     intensities = []
     for coord in coordinates:
-        intensity = np.sum(img[coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1,coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
+        intensity = np.sum(img_ch1[coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1,coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
         intensities.append(intensity)
     
     # add to old list of coordinates
@@ -113,7 +116,7 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
         tracks_all = exinfo
     
     # event detection
-    imgsize = np.shape(img)[0]
+    imgsize = np.shape(img_ch1)[0]
     coords_event = np.empty((0,3))
     if len(tracks_all) > 0:
         # link coordinate traces (only last memory_frames+frames_appear frames, in order to be able to link tracks memory_frames ago for when a potential event appeared)
@@ -143,6 +146,7 @@ def dyn_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
                         # and that it increases in all three ratios
                         track_self = track_self_after.tail(1)
                         prev_frames = np.array(prev_frames).astype('float32')
+                        print(np.shape(prev_frames))
                         track_intensity_before = np.sum(prev_frames[-2*frames_appear:-frames_appear, int(track_self['x'])-intensity_sum_rad:int(track_self['x'])+intensity_sum_rad+1,
                                                                    int(track_self['y'])-intensity_sum_rad:int(track_self['y'])+intensity_sum_rad+1],
                                                                axis=(1,2))/(2*intensity_sum_rad+1)**2

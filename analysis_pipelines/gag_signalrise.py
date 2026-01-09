@@ -16,7 +16,7 @@ def eucl_dist(a,b):
 def f(x, A, B):
     return A*x + B
 
-def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+def gag_signalrise(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                      min_dist_appear=5, num_peaks=300, thresh_abs_lo=1.7, thresh_abs_hi=10, finalintlo=0.75, 
                      finalinthi=5, border_limit=10, memory_frames=6, track_search_dist=10, frames_appear=4, 
                      thresh_intincratio=1.3, thresh_intincratio_max=15, intincslope=0.1, thresh_move_dist=1.3):
@@ -26,7 +26,7 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     used for detecting slow accumulation of gag signal, with a low confocal frame rate, at potential virus budding sites.
     
     Common parameters:
-    img - current image
+    img_ch1 - current image
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
@@ -60,8 +60,12 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     track_search_dist = int(track_search_dist)
     thresh_stayframes = int(frames_appear*0.7)  # can be gone after it appears, for 30% of frames that comes
     
-    img = np.array(img).astype('float32')
-    img_ana = ndi.gaussian_filter(img, smoothing_radius_raw)
+    if binary_mask is None:
+        img_ch1 = np.array(img_ch1).astype('float32')
+    else:
+        img_ch1 = img_ch1 * binary_mask
+        img_ch1 = np.array(img_ch1).astype('float32')
+    img_ana = ndi.gaussian_filter(img_ch1, smoothing_radius_raw)
     # Peak_local_max as a combo of opencv and numpy
     img_ana = np.clip(img_ana, a_min=0, a_max=None)
     img_ana = img_ana.astype('float32')
@@ -94,7 +98,7 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
     # extract intensities summed around each coordinate
     intensities = []
     for coord in coordinates:
-        intensity = np.sum(img[coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1,coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
+        intensity = np.sum(img_ch1[coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1,coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
         intensities.append(intensity)
     
     # add to old list of coordinates
@@ -109,7 +113,7 @@ def gag_signalrise(img, prev_frames=None, binary_mask=None, exinfo=None, presetR
         tracks_all = exinfo
     
     # event detection
-    imgsize = np.shape(img)[0]
+    imgsize = np.shape(img_ch1)[0]
     coords_event = np.empty((0,3))
     if len(tracks_all) > 0:
         # link coordinate traces (only last memory_frames+frames_appear frames, in order to be able to link tracks memory_frames ago for when a potential event appeared)

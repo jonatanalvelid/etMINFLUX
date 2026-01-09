@@ -6,18 +6,20 @@ import pandas as pd
 
 tp.quiet()
 
-def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
-                       maxfilter_kersize=5, thresh_abs=20, smoothing_radius=1, border_limit=15, init_smooth=1,
-                       num_prev=2, msm_thresh=2, ch2sig_thresh_lo=0.3, ch2sig_thresh_hi=1):
+def peak_detection_stationary_triplecolor(img_ch1, img_ch2, img_ch3, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
+                       maxfilter_kersize=5, thresh_abs=10, smoothing_radius=1, border_limit=15, init_smooth=1,
+                       num_prev=4, msm_thresh=0.7, ch2sig_thresh_lo=0.2, ch2sig_thresh_hi=10, ch3sig_thresh_lo=0.2, ch3sig_thresh_hi=10):
     
     """
     Analysis pipeline to detect bright peaks that are stationary in an image, using a maximum intensity detection filter,
     and then checking if they are stationary inside the previous frames. Only return a random stationary peak. This version
-    also considers a second channel, from img_ch2, and checks that the mean signal in that channel is within a certain range. 
+    also considers a second channel, from img_ch2, and a third channel, from img_ch3, and checks that the mean signal
+    in that channel is within a certain range. 
     
     Common parameters:
     img_ch1 - current image
     img_ch2 - current image in the second channel
+    img_ch3 - current image in the third channel
     prev_frames - previous image(s)
     binary_mask - binary mask of the region to consider
     exinfo - pandas dataframe of the detected vesicles and their track ids from the previous frames
@@ -33,6 +35,8 @@ def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, bina
     msm_thresh - maximum threshold for msm, mean squared movement, between individual frames
     ch2sig_thresh_lo - low threshold for the mean channel 2 signal around a stationary peak
     ch2sig_thresh_hi - high threshold for the mean channel 2 signal around a stationary peak
+    ch3sig_thresh_lo - low threshold for the mean channel 3 signal around a stationary peak
+    ch3sig_thresh_hi - high threshold for the mean channel 3 signal around a stationary peak
     """
     roi_sizes = False
 
@@ -41,6 +45,7 @@ def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, bina
 
     img_ch1 = np.array(img_ch1).astype('float32')
     img_ch2 = np.array(img_ch2).astype('float32')
+    img_ch3 = np.array(img_ch3).astype('float32')
     if init_smooth==1:
         img_ch1 = ndi.gaussian_filter(img_ch1, smoothing_radius)
     
@@ -78,19 +83,23 @@ def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, bina
 
     # create initial exinfo, if first analysis frame
     if exinfo is None:
-        exinfo = pd.DataFrame(columns=['particle','frame','x','y','intensity','intensitych2'])
+        exinfo = pd.DataFrame(columns=['particle','frame','x','y','intensity','intensitych2','intensitych3'])
     coordinates = coordinates[coordinates[:, 0].argsort()]
     
     # extract intensities summed around each coordinate
     intensity_sum_rad = 3
     intensity_sum_rad_ch2 = 3
+    intensity_sum_rad_ch3 = 3
     intensities = []
     intensitiesch2 = []
+    intensitiesch3 = []
     for coord in coordinates:
         intensity = np.sum(img_ch1[coord[1]-intensity_sum_rad:coord[1]+intensity_sum_rad+1,coord[0]-intensity_sum_rad:coord[0]+intensity_sum_rad+1])/(2*intensity_sum_rad+1)**2
         intensitych2 = np.sum(img_ch2[coord[1]-intensity_sum_rad_ch2:coord[1]+intensity_sum_rad_ch2+1,coord[0]-intensity_sum_rad_ch2:coord[0]+intensity_sum_rad_ch2+1])/(2*intensity_sum_rad_ch2+1)**2
+        intensitych3 = np.sum(img_ch3[coord[1]-intensity_sum_rad_ch3:coord[1]+intensity_sum_rad_ch3+1,coord[0]-intensity_sum_rad_ch3:coord[0]+intensity_sum_rad_ch3+1])/(2*intensity_sum_rad_ch3+1)**2
         intensities.append(intensity)
         intensitiesch2.append(intensitych2)
+        intensitiesch3.append(intensitych3)
     
     # add to old list of coordinates
     if len(exinfo) > 0:
@@ -98,7 +107,7 @@ def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, bina
     else:
         timepoint = 0
     if len(coordinates)>0:
-        coords_df = pd.DataFrame(np.hstack((np.array(range(len(coordinates))).reshape(-1,1),timepoint*np.ones(len(coordinates)).reshape(-1,1),coordinates,np.array(intensities).reshape(-1,1),np.array(intensitiesch2).reshape(-1,1))),columns=['particle','frame','x','y','intensity','intensitych2'])
+        coords_df = pd.DataFrame(np.hstack((np.array(range(len(coordinates))).reshape(-1,1),timepoint*np.ones(len(coordinates)).reshape(-1,1),coordinates,np.array(intensities).reshape(-1,1),np.array(intensitiesch2).reshape(-1,1),np.array(intensitiesch3).reshape(-1,1))),columns=['particle','frame','x','y','intensity','intensitych2','intensitych3'])
         tracks_all = pd.concat([exinfo, coords_df])
     else:
         tracks_all = exinfo
@@ -118,7 +127,9 @@ def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, bina
                 if np.mean(sm) < msm_thresh:
                     ch2sig = np.mean(particle_track['intensitych2'])
                     if ch2sig > ch2sig_thresh_lo and ch2sig < ch2sig_thresh_hi:
-                        coords_events.append([[int(particle_track.iloc[-1]['x']), int(particle_track.iloc[-1]['y'])]])
+                        ch3sig = np.mean(particle_track['intensitych3'])
+                        if ch3sig > ch3sig_thresh_lo and ch3sig < ch3sig_thresh_hi:
+                            coords_events.append([[int(particle_track.iloc[-1]['x']), int(particle_track.iloc[-1]['y'])]])
     
     coords_events = np.array(coords_events)
     
@@ -129,4 +140,4 @@ def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, bina
     else:
         coords_event_return = np.empty((0,3))
     
-    return coords_event_return, roi_sizes, tracks_all, img_ch2
+    return coords_event_return, roi_sizes, tracks_all, img_ch2  # , img_ch3  # TODO: currently no way to return img_ch3, so it will not be saved. Need bigger changes in controller to handle this, if needed?
