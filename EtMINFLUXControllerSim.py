@@ -399,8 +399,8 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.__fast_frame = 0
         self.__post_event_frames = 0
         self.__pipeline_runtimes = []
-        self.__aoi_coords_deque = deque(maxlen=0)
-        self.__aoi_sizes_deque = deque(maxlen=0)
+        self.__roi_events = deque(maxlen=0)
+        self.__roi_sizes = deque(maxlen=0)
         self.__roiFollowMultipleCurrIdx = 0
         self.__roiFollowCurrCycle = 0
         self.__followingROIContinue = False
@@ -613,17 +613,16 @@ class EtMINFLUXControllerSim(QtCore.QObject):
                         areas_of_interest.append(pair)
                 else:
                     areas_of_interest.append(coords_detected[0])
-                self.__aoi_coords_deque = deque(areas_of_interest, maxlen=len(areas_of_interest))
-                coords_scan = self.__aoi_coords_deque.popleft()
+                self.__roi_events = deque(areas_of_interest, maxlen=len(areas_of_interest))
+                coords_scan = self.__roi_events.popleft()
                 # if we do not preset ROI size, also make a deque for the detected roi_sizes
                 if not self.__presetROISize:
-                    self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
-                    roi_size = self.__aoi_sizes_deque.popleft()
+                    self.__roi_sizes = deque(roi_sizes, maxlen=len(areas_of_interest))
+                    roi_size = self.__roi_sizes.popleft()
                 else:
                     roi_size = None
                 self._widget.initiateButton.setText('Next ROI')
             elif self.__exinfo is not None and (pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand'):
-                # TODO: generalize for other pipelines (like, if _rand in name, or if _def in name, take specified/random idx?)
                 # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
                 idx = int(self.__exinfo)
                 if idx < len(coords_detected):
@@ -682,9 +681,9 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         if roi_idx > -1:
             self._widget.coordListWidget.list.takeItem(roi_idx)
             if self.__runMode == RunMode.Experiment:
-                del self.__aoi_coords_deque[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
+                del self.__roi_events[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
                 try:
-                    del self.__aoi_sizes_deque[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
+                    del self.__roi_sizes[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
                 except:
                     pass
             self._widget.analysisHelpWidget.removeROI(roi_idx)
