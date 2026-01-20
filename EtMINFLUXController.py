@@ -1,13 +1,29 @@
 import os
+print('ye1')
 import glob
+print('ye2')
 import sys
+print('ye3')
 import importlib
+print('ye4')
 import enum
+print('ye5')
 import warnings
+print('ye6')
 import time
+print('ye7')
 import math
+print('ye8')
 import json
+print('ye9')
 
+import os
+print('ye10')
+import sys
+print('ye11')
+sys.path.append(os.path.dirname(sys.executable))  # required for specpy executable to load specpy
+
+print('ye12')
 import specpy
 import mouse
 

@@ -5,6 +5,9 @@ from EtMINFLUXWidgetSim import EtMINFLUXWidgetSim
 from qtpy import QtWidgets
 import sys
 import json
+import os
+import sys
+sys.path.append(os.path.dirname(sys.executable))  # required for specpy executable to load specpy
 
 if __name__ == "__main__":
     etMINFLUXapp = QtWidgets.QApplication(sys.argv)
