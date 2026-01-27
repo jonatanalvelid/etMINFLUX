@@ -109,9 +109,7 @@ def peak_detection_rand(img_ch1, prev_frames=None, binary_mask=None, exinfo=None
     coordinates = np.flip(coordinates, axis=1)
 
     # generate random coordinate number to use from the user-provided inputs
-    if len(coordinates)>0:
-        coord_num = np.random.randint(coord_num_lim_lo, np.min([coord_num_lim_hi, len(coordinates)]))
-    else:
-        coord_num=0
-
+    coord_num = np.random.randint(coord_num_lim_lo, np.min([coord_num_lim_hi, len(coordinates)]))
+    coordinates = np.array([coordinates[coord_num]])
+    
     return coordinates, roi_sizes, coord_num, img_ana

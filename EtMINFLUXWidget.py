@@ -35,7 +35,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.experimentModesPar.addItems(self.experimentModes)
         self.experimentModesPar.setCurrentIndex(0)
         # generate dropdown list for ROI following modes
-        self.roiFollowingModes = ['Single','SingleRedetect','Multiple']
+        self.roiFollowingModes = ['Single','SingleRedetect','Multiple','MultipleDetect']
         self.roiFollowingModesPar = ComboBox()
         self.roiFollowingModesPar_label = FieldLabel('ROI following mode')
         self.roiFollowingModesPar.addItems(self.roiFollowingModes)
@@ -47,11 +47,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton = PushButton('Initiate etMINFLUX')
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = PushButton('Load pipeline')
-        # create buttons for calibrating coordinate transform, recording binary mask, save current measurement
-        self.coordTransfCalibButton = PushButton('Calibration settings...')
+        # create buttons for calibrating coordinate transform, recording binary mask, save current measurement, and start a multiple event detection ROI following experiment manually
+        self.miscSettingsButton = PushButton('Misc. settings...')
         self.saveCurrentMeasButton = PushButton('Save curr. meas.')
         self.openGuideButton = PushButton('Open guide...')
         self.binaryMaskButton = PushButton('Binary mask settings...')
+        self.startMFXPhaseButton = PushButton('Start MFX phase')
         # creat button for unlocking any softlock happening
         self.softResetButton = PushButton('Soft reset')
         # create check box for endless running mode
@@ -70,11 +71,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.lineWiseAnalysisCheck = CheckBox('Run analysis pipeline linewise')
         # create check box for randomizing ROIs from binary mask
         self.triggerRandomROICheck = CheckBox('Random ROI (bin)')
-        # create check box for automatic saving
-        self.autoSaveCheck = CheckBox('Auto-save .msr after event')
-        self.autoSaveCheck.setChecked(False)
-        self.autoDeleteMFXDatasetCheck = CheckBox('Auto-delete mfx data after save')
-        self.autoDeleteMFXDatasetCheck.setChecked(False)
         # create check box for plotting ROI even in experiment mode
         self.plotROICheck = CheckBox('Plot ROI (experiment mode)')
         # create check box for confocal monitoring pausing between frames
@@ -139,6 +135,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.follow_roi_interval_edit = LineEdit(str(0))
         self.follow_roi_redetectthresh_label = FieldLabel('Redetect dist threshold (px)')
         self.follow_roi_redetectthresh_edit = LineEdit(str(0))
+        self.multiple_detect_window_label = FieldLabel('MultiDetect event detection window (min)')
+        self.multiple_detect_window_edit = LineEdit(str(0))
+        self.mfx_phase_eventlim_label = FieldLabel('MultiDetect events to start MFX phase')
+        self.mfx_phase_eventlim_edit = LineEdit(str(0))
         # create GUI group titles
         self.misc_title = TitleLabel('Transform, calibration, saving, guide, binary mask')
         self.minflux_title = TitleLabel('MINFLUX imaging parameters')
@@ -162,10 +162,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # help widget for binary mask
         self.binaryMaskWidget = BinaryMaskWidget(*args, **kwargs)
         # help widget for showing images from the analysis pipelines, i.e. binary masks or analysed images in live
-        self.analysisHelpWidget = AnalysisWidget()
+        self.analysisHelpWidget = AnalysisWidget('Analysis run')
+        self.multiMFXROIHelpWidget = AnalysisWidget('Multi MFX ROI')
         # help widget for showing coords list
         self.coordListWidget = CoordListWidget(*args, **kwargs)
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
+        self.multiMFXROIcoordListWidget = CoordListWidget(*args, **kwargs)
+        self.multiMFXROIHelpWidget.addWidgetRight(self.multiMFXROIcoordListWidget)
         # help widget for event viewing
         self.eventViewWidget = EventWidget()
         # help widget for displaying guide
@@ -248,25 +251,28 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.lines_analysis_label, currentRow, 0)
         self.grid.addWidget(self.lines_analysis_edit, currentRow, 1)
-        self.grid.addWidget(self.misc_title, currentRow, 2, 1, 3)
+        self.grid.addWidget(self.multiple_detect_window_label, currentRow, 2)
+        self.grid.addWidget(self.multiple_detect_window_edit, currentRow, 3)
+        self.grid.addWidget(self.startMFXPhaseButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.plotROICheck, currentRow, 0)
         self.grid.addWidget(self.lineWiseAnalysisCheck, currentRow, 1)
-        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 2)
-        self.grid.addWidget(self.autoSaveCheck, currentRow, 3)
-        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
+        self.grid.addWidget(self.mfx_phase_eventlim_label, currentRow, 2)
+        self.grid.addWidget(self.mfx_phase_eventlim_edit, currentRow, 3)
         currentRow += 1
         self.grid.addWidget(self.init_frames_label, currentRow, 0)
         self.grid.addWidget(self.init_frames_edit, currentRow, 1)
-        self.grid.addWidget(self.openGuideButton, currentRow, 2)
-        self.grid.addWidget(self.coordTransfCalibButton, currentRow, 3)
-        self.grid.addWidget(self.binaryMaskButton, currentRow, 4)
+        self.grid.addWidget(self.misc_title, currentRow, 2, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
         self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
-        self.grid.addWidget(self.softResetButton, currentRow, 4)
+        self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 2)
+        self.grid.addWidget(self.miscSettingsButton, currentRow, 3)
+        self.grid.addWidget(self.binaryMaskButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
+        self.grid.addWidget(self.openGuideButton, currentRow, 2)
+        self.grid.addWidget(self.softResetButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
 
@@ -276,9 +282,14 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.move(frame_gm.topLeft())
 
     def resetHelpWidget(self):
-        self.analysisHelpWidget = AnalysisWidget()
+        # create help widgets for showing the analysis results, and list all detected ROIs in one analysis run
+        self.analysisHelpWidget = AnalysisWidget('Analysis run')
         self.coordListWidget = CoordListWidget()
         self.analysisHelpWidget.addWidgetRight(self.coordListWidget)
+        # create help widgets for showing and listing all MFX ROIs that currently are planned to being looped through in a multi MFX ROI experiments (following or single loop)
+        self.multiMFXROIHelpWidget = AnalysisWidget('Multi MFX ROI')
+        self.multiMFXROIcoordListWidget = CoordListWidget()
+        self.multiMFXROIHelpWidget.addWidgetRight(self.multiMFXROIcoordListWidget)
 
     def resetEventViewWidget(self):
         self.eventViewWidget = EventWidget()
@@ -306,6 +317,8 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # set ROI following mode default values
         self.follow_roi_interval_edit.setText(str(setupInfo.get('roi_following_settings').get('confocal_interval_def')))
         self.follow_roi_redetectthresh_edit.setText(str(setupInfo.get('roi_following_settings').get('redetect_dist_thresh_def')))
+        self.multiple_detect_window_edit.setText(str(setupInfo.get('roi_following_settings').get('multidetect_event_det_wind')))
+        self.mfx_phase_eventlim_edit.setText(str(setupInfo.get('roi_following_settings').get('multidetect_events_to_start')))
         # activation laser powers default values
         if activation_lasers_present:
             self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
@@ -406,8 +419,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
 class AnalysisWidget(QtWidgets.QWidget):
     """ Pop-up widget for the live analysis images or binary masks. """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, widgetid, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.widgetid = widgetid
 
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
@@ -472,6 +487,12 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def addWidgetRight(self, widget):
         self.grid.addWidget(widget, 1, 7, 1, 1)
+        self.helpcoordwidget = widget
+
+    def reset(self):
+        self.removeROIs()
+        self.img.setImage(np.zeros((100,100)), autoLevels=False)
+        self.helpcoordwidget.clearList()
 
 
 class EventWidget(QtWidgets.QWidget):
@@ -487,26 +508,27 @@ class EventWidget(QtWidgets.QWidget):
         self.image_viewer = StackViewerWidget(self)
         self.intensity_graph = IntensityGraphWidget(self)
         
+        # generate dropdown list for detected events
+        self.eventIndexes = []
+        self.eventsPar = ComboBox()
+        self.eventsPar.addItems(self.eventIndexes)
+        self.eventsPar.setCurrentIndex(0)  # TODO: have to check if this works
+
         # Create a grid layout and add widgets
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
-        self.grid.addWidget(self.image_viewer, 0, 0)
-        self.grid.addWidget(self.intensity_graph, 0, 1)
+        self.grid.addWidget(self.eventsPar, 0, 0)
+        self.grid.addWidget(self.image_viewer, 1, 0)
+        self.grid.addWidget(self.intensity_graph, 1, 1)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QPoint(0,700)
         frame_gm.moveTopLeft(topLeftPoint)
         self.move(frame_gm.topLeft())
         
-    def add_frame_and_intensity(self, image, intensity):
-        # Add frame to image viewer and update intensity trace
-        self.image_viewer.add_frame(image)
-        # Update intensity graph with the full trace
-        self.intensity_graph.update_plot_postevent(intensity)
-
-    def add_event(self, image_stack, intensity_trace):
+    def add_event(self, image_stack, intensity_trace, event_frame):
         self.image_viewer.add_frames_event(image_stack)
-        self.intensity_graph.update_plot_event(intensity_trace)
+        self.intensity_graph.update_plot_event(intensity_trace, event_frame)
 
     def reset(self):
         self.image_viewer.reset()
@@ -538,31 +560,23 @@ class IntensityGraphWidget(QtWidgets.QWidget):
 
         self.reset()
         
-    def update_plot(self):
+    def update_plot(self, event_frame, intensity_trace):
         self.ax.clear()
         # plot vertical lines for event
-        self.ax.axvline(x=self.event_frame, linewidth=4, color='g', alpha=0.6)
-        self.ax.plot(self.intensity_trace, 'r-')
+        self.ax.axvline(x=event_frame, linewidth=4, color='g', alpha=0.6)
+        self.ax.plot(intensity_trace, 'r-')
         self.ax.set_title("Event area intensity")
         self.ax.set_xlabel("Frame")
         self.ax.set_ylabel("Intensity")
+        lims = [0, np.max(intensity_trace)*1.3 if len(intensity_trace)>0 else 1]
+        self.ax.set_ylim(*lims)
         self.canvas.draw()
 
-    def update_plot_event(self, intensity_trace):
-        if len(intensity_trace) == 1:
-            self.event_frame = 0
-        else:
-            self.event_frame = len(intensity_trace)
-        self.intensity_trace = intensity_trace
-        self.update_plot()
-
-    def update_plot_postevent(self, intensity_trace):
-        self.intensity_trace = intensity_trace
-        self.update_plot()
+    def update_plot_event(self, intensity_trace, event_frame):
+        self.update_plot(event_frame, intensity_trace)
 
     def reset(self):
-        self.event_frame = None
-        self.intensity_trace = []
+        self.update_plot(0,[])
 
 
 class StackViewerWidget(QtWidgets.QWidget):
@@ -626,15 +640,13 @@ class StackViewerWidget(QtWidgets.QWidget):
 
         self.reset()
 
-    def add_frame(self, frame):
-        self.stack.append(frame)
-        self.slider.setMaximum(len(self.stack) - 1)
-        self.update_display()
-
     def add_frames_event(self, frames):
         self.reset()
-        for frame in frames:
-            self.stack.append(frame)
+        if len(np.shape(frames)) > 2:
+            for frame in frames:
+                self.stack.append(frame)
+        else:
+            self.stack.append(frames)
         self.slider.setMaximum(len(self.stack) - 1)
         self.update_display()
 
@@ -673,6 +685,8 @@ class CoordListWidget(QtWidgets.QWidget):
         self.list = QtWidgets.QListWidget()
         self.list.setVerticalScrollMode(QtWidgets.QListWidget.ScrollPerPixel)
 
+        self.roi_ids = []
+
         # create widget fields for the ROI list
         self.delROIButton = PushButton('Delete ROI')
         self.numevents_edit_nullmessage = 'Number of detected events: not running'
@@ -686,22 +700,27 @@ class CoordListWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.numevents_edit, 1, 0)
         self.grid.addWidget(self.list, 2, 0)
 
-    def addCoords(self, coord_list, roi_sizes, colors):
+    def addCoords(self, coord_list, roi_sizes, eventids, colors):
         self.clearList()
-        for coord, roi_size, color in zip(coord_list, roi_sizes, colors):
-            self.addCoord(coord, roi_size, color)
+        for coord, roi_size, eventid, color in zip(coord_list, roi_sizes, eventids, colors):
+            self.addCoord(coord, roi_size, color, eventid)
 
-    def addCoord(self, coord, roi_size, color):
-        listitem = QtWidgets.QListWidgetItem(f'Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
+    def addCoord(self, coord, roi_size, color, roi_id):
+        listitem = QtWidgets.QListWidgetItem(f'Id: {roi_id}, Pos (px): [{coord[0]},{coord[1]}], ROI size (µm): [{roi_size[0]},{roi_size[1]}]')
         self.list.addItem(listitem)
+        self.roi_ids.append(roi_id)
 
     def deleteCoord(self, idx):
-        self.list.takeItem(0)
+        roiid_delete = int(self.list.item(idx).text().split(', Pos')[0].split('d: ')[1])
+        self.list.takeItem(idx)
+        self.roi_ids.pop(self.roi_ids.index(roiid_delete))
+        return roiid_delete
 
     def clearList(self):
         last_item = True
         while last_item is not None:
             last_item = self.list.takeItem(0)
+        self.roi_ids = []
 
 
 class CoordTransformWidget(QtWidgets.QWidget):
@@ -735,6 +754,12 @@ class CoordTransformWidget(QtWidgets.QWidget):
         self.template_conf_stackidx_label = FieldLabel('Confocal stack index')
         self.template_conf_stackidx_edit = LineEdit(str(0))
 
+        # create check box for automatic saving
+        self.autoSaveCheck = CheckBox('Auto-save .msr after event')
+        self.autoSaveCheck.setChecked(True)
+        self.autoDeleteMFXDatasetCheck = CheckBox('Auto-delete mfx data after save')
+        self.autoDeleteMFXDatasetCheck.setChecked(False)
+
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
         self.setLayout(self.grid)
@@ -753,6 +778,9 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.setSaveDirButton, currentRow, 0)
         self.grid.addWidget(self.save_dir_edit, currentRow, 1, 1, 2)
+        currentRow += 1
+        self.grid.addWidget(self.autoSaveCheck, currentRow, 0)
+        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 1)
         currentRow += 1
         self.grid.addWidget(self.transform_title, currentRow, 0, 1, 3)
         currentRow += 1
@@ -873,7 +901,7 @@ class GuideWidget(QtWidgets.QWidget):
             self.textBrowser.setSource(source)
 
 
-# Copyright (C) 2023-2025 Jonatan Alvelid
+# Copyright (C) 2023-2026 Jonatan Alvelid
 #
 # EtMINFLUX is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
