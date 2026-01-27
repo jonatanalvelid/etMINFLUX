@@ -78,7 +78,7 @@ class EtMINFLUXController(QtCore.QObject):
         sys.path.append(self.transformDir)
         # set lists of analysis pipelines and transformations in the widget
         self._widget.setAnalysisPipelines(self.analysisDir)
-        self._widget.setTransformations(self.transformDir)
+        self._widget.coordTransformWidget.setTransformations(self.transformDir)
 
         # set list of available MFX sequences in the widget
         self._widget.setMfxSequenceList(self.setupInfo.get('acquisition_settings').get('minflux_seqs'), thread=0)
@@ -101,8 +101,6 @@ class EtMINFLUXController(QtCore.QObject):
         # Connect EtMINFLUXWidget button and check box signals
         self._widget.initiateButton.clicked.connect(self.initiate)
         self._widget.loadPipelineButton.clicked.connect(self.loadPipeline)
-        self._widget.recordBinaryMaskButton.clicked.connect(self.initiateBinaryMask)
-        self._widget.resetBinaryMaskButton.clicked.connect(self.resetBinaryMask)
         self._widget.softResetButton.clicked.connect(self.softReset)
         self._widget.saveCurrentMeasButton.clicked.connect(self.saveMeasurement)
 
@@ -168,27 +166,30 @@ class EtMINFLUXController(QtCore.QObject):
         self.__presetROISize = True
         self.__presetRecTime = True
         self.__lineWiseAnalysis = False
-        self.__run_all_aoi = False  # run all detected events/area flag
+        self.__trigger_all_roi = False  # run all detected events/area flag
         self.__autoSaveMeas = False
         self.__autoDelMFX = False
         self.__followingROI = False
         self.__followingROIMode = ROIFollowMode.Single  # roi following mode currently selected
         self.__followingROIContinue = False
+        self.__followingROIEnding = False
         self.__plotROI = False
         self.__confocalFramePause = False
         self.__count_conf_channels = 1
         self.__mfx_twothreaded = False
         self.__img_ana = None
+        self.__confoffset = [0.0, 0.0]  # offset of confocal scan, in um
         self.__prev_event_coords_deque = deque(maxlen=100)
         self.__prevFrames = deque(maxlen=50)  # deque for previous fast frames
         self.__prevAnaFrames = deque(maxlen=50)  # deque for previous preprocessed analysis frames
-        self.__confoffset = [0.0, 0.0]  # offset of confocal scan, in um
+        self.__roi_events = deque(maxlen=0)
+        self.__roi_sizes = deque(maxlen=0)
         self.binary_mask = None  # binary mask of regions of interest, used by certain pipelines, leave None to consider the whole image
-        self.binary_frames = 2  # number of frames to use for calculating binary mask 
+        self.binary_frames = 3  # number of frames to use for calculating binary mask 
         self.__init_frames = 0  # number of frames after initiating etMINFLUX before a trigger can occur, to allow laser power settling etc
         self.__validation_frames = 2  # number of fast frames to record after detecting an event in validation mode
         self.__params_exclude = ['img_ch1', 'img_ch2', 'img_ch3', 'prev_frames', 'binary_mask', 'exinfo', 'testmode', 'presetROIsize']  # excluded pipeline parameters when loading param fields
-        self.__rec_time_deadtime = 5  # deadtime when starting MINFLUX recordings, in s - specifically for m2410 that does not lock everything during this deadtime
+        self.__rec_time_deadtime = 2  # deadtime when starting MINFLUX recordings, in s - specifically for m2410 that does not lock everything during this deadtime
         self.imgs = []  # list of confocal images from different channels
 
     def getSaveFolder(self):
@@ -223,6 +224,8 @@ class EtMINFLUXController(QtCore.QObject):
             detectorIdxth0 = self._widget.mfxth0_detector_par.currentIndex()
             self.mfxth0_detector = self.mfxDetectorListThreads[detectorIdxth0]
             self.mfxch0_detector = self.mfxDetectorList[detectorIdxth0]
+            actlaserIdx = self._widget.mfx_act_laser_par.currentIndex()
+            self.mfx_act_laser = self._widget.mfx_act_lasers[actlaserIdx]
             self.mfx_act_pwr = float(self._widget.mfx_act_pwr_edit.text())
             if self.__mfx_twothreaded:
                 sequenceIdxth1 = self._widget.mfxth1_seq_par.currentIndex()
@@ -274,7 +277,7 @@ class EtMINFLUXController(QtCore.QObject):
             if self.__lineWiseAnalysis:
                 self.__confocalLinesAnalysisPeriod = int(self._widget.lines_analysis_edit.text())
             else:
-                self.__confocalLinesAnalysisPeriod = self.__confocalLinesFrame
+                self.__confocalLinesAnalysisPeriod = self.confocalLinesFrame
             # if confocal frame pause, read pause value
             if self.__confocalFramePause:
                 self.pausetime = int(self._widget.conf_frame_pause_edit.text()) * 1000  # time in ms
@@ -290,6 +293,10 @@ class EtMINFLUXController(QtCore.QObject):
                 self.recTimeTimer.stop()
             self.recTimeTimerThread.quit()
             self.stopMFX()
+            # after pausing, loop-check until Imspector measurement status shows that recording has ended
+            while self._imspector.value_at('Measurement/timing/progress', specpy.ValueTree.Status).get()['active']==True:
+                print('Still running measurement')
+                time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_base'))
             self.scanEnded()
         else:
             # save log and confocal data
@@ -321,11 +328,6 @@ class EtMINFLUXController(QtCore.QObject):
         self.__prevFrames.clear()
         self.__prevAnaFrames.clear()
 
-    def finishMFXROIAuto(self):
-        """ Trigger this when a preset-rec-time MFX ROI has finished. """
-        self.__runningMFX = False
-        self.scanEnded()
-
     def imspectorLineEvent(self):
         """ Called when a line in a confocal image is finished in Imspector. """
         self.__confocalLineAnalysisCurr += 1
@@ -333,13 +335,13 @@ class EtMINFLUXController(QtCore.QObject):
         analysisSuccess = False
         if self.__confocalLineAnalysisCurr == self.__confocalLinesAnalysisPeriod:
             self.__confocalLineAnalysisCurr = 0
-            analysisSuccess = self.analysisPeriodTrigger()
-        if self.__confocalLineFrameCurr >= self.__confocalLinesFrame:
+            analysisSuccess, stopFollowingExperiment = self.analysisPeriodTrigger()
+        if self.__confocalLineFrameCurr >= self.confocalLinesFrame:
             self.__confocalLineFrameCurr = 0
             self.__fast_frame += 1
             self.bufferLatestImages()
             self.updateConfocalFrameDisp()
-            if self.__confocalFramePause and not analysisSuccess:
+            if self.__confocalFramePause and not analysisSuccess and not stopFollowingExperiment:
                 self.confocalIntermittentPause()
 
     def confocalIntermittentPause(self):
@@ -375,35 +377,36 @@ class EtMINFLUXController(QtCore.QObject):
         elif self.__followingROI:
             self.setDetLogLine(f"mfx_end-cycle{self.__roiFollowCurrCycle}", None) 
             self.setDetLogLine("recording_mode", "roi_follow_single")               
-        elif self.__run_all_aoi:
-            self.setDetLogLine(f"mfx_end-id{self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)}", None)
+        elif self.__trigger_all_roi:
+            self.setDetLogLine(f"mfx_end-id{self.__roi_events.maxlen-len(self.__roi_events)}", None)
             self.setDetLogLine("recording_mode", "all_roi") 
         else:
             self.setDetLogLine("mfx_end", None)
             self.setDetLogLine("recording_mode", "single_roi") 
         if self.__plotROI and not self.__followingROI:
             self.deleteROIGUI(idx=0)  # delete top ROI from list
-        if (not self.__run_all_aoi or not self.__aoi_coords_deque) and (not self.__followingROIContinue):
-            time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))
+        if (not self.__trigger_all_roi or not self.__roi_events) and (not self.__followingROIContinue):
             self.endExperiment()
             time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))
             self.continueFastModality()
             self.__fast_frame = 0
         elif self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
-            time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))  # to make sure Imspector has properly turned off MINFLUX recording
             self.__roiFollowMultipleCurrIdx += 1
-            if self.__roiFollowMultipleCurrIdx == len(self.__aoi_coords_deque):
+            if self.__roiFollowMultipleCurrIdx == len(self.__roi_events):
                 self.__roiFollowCurrCycle += 1
                 self.__roiFollowMultipleCurrIdx = 0
                 self.endFollowingROIStep()
                 time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))
                 self.continueFastModality()
                 return
-            coords = self.__aoi_coords_deque.popleft()
-            self.__aoi_coords_deque.append(coords)
-            self.newROIMFX(coords, roi_idx=self.__roiFollowMultipleCurrIdx)
+            if len(self.__roi_events)>0:
+                coords = self.__roi_events.popleft()
+                self.__roi_events.append(coords)
+                self.newROIMFX(coords, roi_idx=self.__roiFollowMultipleCurrIdx)
+            else:
+                # no more ROIs to follow, end experiment
+                self.endFollowingROIExperiment()
         elif self.__followingROI:
-            time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))  # to make sure Imspector has properly turned off MINFLUX recording
             self.__roiFollowCurrCycle += 1
             self.endFollowingROIStep()
             time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))
@@ -412,12 +415,11 @@ class EtMINFLUXController(QtCore.QObject):
             # only triggers if followingROI check box have been unclicked to end a followingROI experiment,
             # in which case one more confocal frame will be run, and all data will afterwards be saved,
             # before resetting everytning.
-            time.sleep(2*self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))
             self.continueFastModality()
             self.__fast_frame = 0
-        elif self.__run_all_aoi:
-            time.sleep(2*self.setupInfo.get('timing_settings').get('sleep_time_roiswitch'))  # to make sure Imspector has properly turned off MINFLUX recording
-            self.newROIMFX(self.__aoi_coords_deque.popleft(), roi_idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
+        elif self.__trigger_all_roi:
+            event = self.__roi_events.popleft()
+            self.newROIMFX(event, roi_idx=self.__roi_events.maxlen-len(self.__roi_events))
 
     def deleteROIGUI(self, idx):
         self._widget.coordListWidget.deleteCoord(idx)
@@ -447,10 +449,11 @@ class EtMINFLUXController(QtCore.QObject):
                 new_key = new_key+str(new_key_idx)
             return new_key
 
-    def endExperiment(self):
+    def endExperiment(self, filename_prefix=None):
         """ Save all etMINFLUX scan metadata/log file and data. """
         # save log and confocal data leading up to event image
-        filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
+        if filename_prefix is None:
+            filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
         self.saveDetLog(filename_prefix)
         self.saveValidationImages(prev=True, prev_ana=True, path_prefix=filename_prefix)
         if self.__autoSaveMeas:
@@ -469,6 +472,7 @@ class EtMINFLUXController(QtCore.QObject):
             if self.__hasRunMFX:
                 if self.__presetRecTime:
                     self.setDetLogLine("MFXRecTime", self.__rec_time_scan)
+                    self.setDetLogLine("roifollow_mfx_runtime", self.__follow_roi_confocal_interval)
             self.setDetLogLine('experiment_end', None)
             # save log file with temporal info of trigger event
             name = os.path.join(self._dataDir, filename_prefix) + '_log'
@@ -485,8 +489,8 @@ class EtMINFLUXController(QtCore.QObject):
 
     def getTransformName(self):
         """ Get the name of the pipeline currently used. """
-        transformidx = self._widget.transformPipelinePar.currentIndex()
-        transformname = self._widget.transformPipelines[transformidx]
+        transformidx = self._widget.coordTransformWidget.transformPipelinePar.currentIndex()
+        transformname = self._widget.coordTransformWidget.transformPipelines[transformidx]
         return transformname
 
     def getPipelineName(self):
@@ -555,8 +559,11 @@ class EtMINFLUXController(QtCore.QObject):
         self.resetHelpWidget()
         self.resetEventViewWidget()
         self.resetRunParams()
-        self.initiateFlagsParams()
         self.resetDetLog()
+        self.__prevFrames = deque(maxlen=500)
+        self.__prevAnaFrames = deque(maxlen=500)
+        self.__roi_events = deque(maxlen=0)
+        self.__roi_sizes = deque(maxlen=0)
 
     def setBusyFalse(self):
         """ Set busy flag to false. """
@@ -602,8 +609,8 @@ class EtMINFLUXController(QtCore.QObject):
         self.__fast_frame = 0
         self.__post_event_frames = 0
         self.__pipeline_runtimes = []
-        self.__aoi_coords_deque = deque(maxlen=0)
-        self.__aoi_sizes_deque = deque(maxlen=0)
+        self.__roi_events = deque(maxlen=0)
+        self.__roi_sizes = deque(maxlen=0)
         self.__roiFollowMultipleCurrIdx = 0
         self.__roiFollowCurrCycle = 0
         self.__followingROIContinue = False
@@ -627,8 +634,8 @@ class EtMINFLUXController(QtCore.QObject):
 
     def generateRandomCoord(self, roi_sizes):
         """ Generate random coord inside the binary mask. """         
-        if self.__binary_mask is not None:
-            possible_pixels = np.where(self.__binary_mask==True)
+        if self.binary_mask is not None:
+            possible_pixels = np.where(self.binary_mask==True)
             rand_idx = np.random.randint(0, len(possible_pixels[0]))
             random_coords = np.array([[possible_pixels[0][rand_idx], possible_pixels[1][rand_idx]]])
             random_coords = np.flip(random_coords, axis=1)
@@ -647,13 +654,14 @@ class EtMINFLUXController(QtCore.QObject):
     def analysisPeriodTrigger(self):
         """ Triggers when an analysis period has finished. Depending on experiment modes set: send either to runPipeline, or act in other ways. """
         analysisSuccess = False
+        stopFollowingExperiment = False
         # enter if not still running last analysis period trigger
         if not self.__busy:
             # set busy true
             self.__busy = True
-            # get image
+            # get confocal image channel(s) from Imspector
             meas = self._imspector.active_measurement()
-            stackidx = 3
+            stackidx = int(self._widget.coordTransformWidget.template_conf_stackidx_edit.text())  # TODO Add info in guide and readme that this needs to be changed - depends on the template in use. Trial and error by setting to 0, 1, 2, ... and see that it takes the right image when testing with TestVisualize.
             self.imgs = []
             self.imgs.append(np.squeeze(meas.stack(stackidx).data()[0]))
             if self.__count_conf_channels >= 2:
@@ -678,12 +686,13 @@ class EtMINFLUXController(QtCore.QObject):
                             break
                     except:
                         pass
-            # if recording mode is following ROI and we are currently following a ROI
-            if self.__followingROIContinue:
+            if self.__followingROIContinue and (self.__followingROIMode == ROIFollowMode.Single or self.__followingROIMode == ROIFollowMode.SingleRedetect or self.__followingROIMode == ROIFollowMode.Multiple):
+                # if recording mode is following ROI and we are currently following a ROI
                 analysisSuccess = True
                 if not self.__followingROI:
                     # if following ROI mode check box has been unchecked - end experiment
                     self.endFollowingROIExperiment()
+                    stopFollowingExperiment = True
                 elif self.__followingROIMode == ROIFollowMode.SingleRedetect:
                     # if we are redetecting a single ROI
                     coords_detected, roi_sizes = self.runPipeline()
@@ -692,21 +701,22 @@ class EtMINFLUXController(QtCore.QObject):
                         self.acquireMINFLUXFull(coords_scan, roi_size)
                         self.updateEventViewWidget(self.imgs[0].copy(), coords_scan)
                     else:
-                        # end experiment, as we no longer have anything to follow, and we cannot suddenly "find it back" again in the next image
+                        # end experiment, as we no longer have anything to follow
                         self.endFollowingROIExperiment()
                 elif self.__followingROIMode == ROIFollowMode.Single:
                     self.acquireMINFLUXMinimal(pos=self.__roi_center_mfx, roi_size_um=self.__roi_size_um_mfx, pos_conf=self.__pos_conf_mfx)
                     self.updateEventViewWidget(self.imgs[0].copy())
                 elif self.__followingROIMode == ROIFollowMode.Multiple:
                     # initiate new cycle of following ROI
-                    coords = self.__aoi_coords_deque.popleft()
-                    self.__aoi_coords_deque.append(coords)
+                    coords = self.__roi_events.popleft()
+                    self.__roi_events.append(coords)
                     #self.__roiFollowMultipleCurrIdx += 1
                     # pause fast imaging
                     self.pauseFastModality()
                     self.newROIMFX(coords, roi_idx=self.__roiFollowMultipleCurrIdx)
+                    # TODO update eventviewwidget here? take code from multidetectROI?
             else:
-                # if initial settling frames have passed
+                # if no following ROI mode continuation, i.e. we are looking for first events, and if initial settling frames have passed
                 if self.__fast_frame > self.__init_frames:
                     coords_detected, roi_sizes = self.runPipeline()
                     # if visualization mode
@@ -721,14 +731,11 @@ class EtMINFLUXController(QtCore.QObject):
                         # move on with triggering modality switch, if we have detected or randomized coords, and if detected coord is sufficiently far away from previous events
                         if len(coords_scan)>0:
                             # check if event coords are close to coords in previous event deques
+                            new_event = True  # assume new event
                             if len(self.__prev_event_coords_deque) > 0:
-                                dists = [np.sqrt((c_old[0]-coords_scan[0])**2+(c_old[1]-coords_scan[1])**2) for c_old in self.__prev_event_coords_deque]
-                                if np.min(dists) > self.setupInfo.get('analysis_settings').get('min_distance_prev_events'):
-                                    new_event = True
-                                else:
+                                dists = [eucl_dist(c_old, coords_scan) for c_old in [event[0] for event in self.__roi_events]]
+                                if np.min(dists) < self.setupInfo.get('analysis_settings').get('min_distance_prev_events'):
                                     new_event = False
-                            else:
-                                new_event = True
                             if new_event or 'fake' in self.getPipelineName():
                                 self.__prev_event_coords_deque.append(coords_scan)
                                 self.acquireMINFLUXFull(coords_scan, roi_size)
@@ -741,7 +748,7 @@ class EtMINFLUXController(QtCore.QObject):
                                 analysisSuccess = True
             # unset busy flag
             self.setBusyFalse()
-        return analysisSuccess
+        return analysisSuccess, stopFollowingExperiment
 
     def initiateEventViewWidget(self, event_coords, frame=None):
         """ Initiate the event view widget with the current confocal frame and event coordinates. """
@@ -757,10 +764,10 @@ class EtMINFLUXController(QtCore.QObject):
     def runPipeline(self):
         """ Run the analyis pipeline on the latest confocal analysis period frame. """
         # start of pipeline
-        self.__pipeline_start_file_prefix = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss')  # use for naming files
+        self.__pipeline_start_file_prefix = datetime.now().strftime('%y%m%d-%H%M%S')  # use for naming files
         # run pipeline
         self.__pipeline_start_time = time.perf_counter()
-        coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(*self.imgs, self.__prevFrames, self.__binary_mask,
+        coords_detected, roi_sizes, self.__exinfo, self.__img_ana = self.pipeline(*self.imgs, self.__prevFrames, self.binary_mask,
                                                                         self.__exinfo, self.__presetROISize,
                                                                         *self.__pipeline_param_vals)
         self.__pipeline_end_time = time.perf_counter()
@@ -789,6 +796,19 @@ class EtMINFLUXController(QtCore.QObject):
             roi_sizes = self.getPresetRoiSize(len(coords_detected))
         self._widget.coordListWidget.addCoords(coords_detected, roi_sizes, colors)
 
+    def plotMFXROIs(self, coords_deque, roi_sizes_deque):
+        # plot MFX ROIs in ROI deque coords in corresponding help widget for multi MFX ROIs
+        colors = [self.popColor() for _ in range(len(coords_deque))]
+        coords_events = [event[0] for event in coords_deque]
+        eventids = [event[1] for event in coords_deque]
+        roi_sizes_events = [event[0] for event in roi_sizes_deque]
+        self.__multiMFXROIHelper.plotScatter(coords_events, colors=colors)
+        self.__multiMFXROIHelper.plotRoiRectangles(coords_events, roi_sizes_events, colors=colors, presetROISize=self.__presetROISize)
+        self.__multiMFXROIHelper.updateNumberEventsDisp(numEvents=len(coords_events))
+        if self.__presetROISize:
+            roi_sizes_events = self.getPresetRoiSize(len(coords_deque))
+        self._widget.multiMFXROIcoordListWidget.addCoords(coords_events, roi_sizes_events, eventids, colors)
+
     def postPipelineValidate(self, coords_detected, roi_sizes):
         """ Called if in validation mode, and initiates validation run or takes care of validation run when finishing. """
         # set analysis image in help widget, and start to record validation frames after event
@@ -797,10 +817,9 @@ class EtMINFLUXController(QtCore.QObject):
         if self.__validating:
             if self.__post_event_frames > self.__validation_frames:
                 # if all validation frames have been recorded, pause fast imaging, end recording, continue fast imaging
-                self.saveValidationImages(prev=True, prev_ana=True, path_prefix=self.__pipeline_start_file_prefix)
                 self.__fast_frame = 0
                 self.pauseFastModality()
-                self.endExperiment()
+                self.endExperiment(filename_prefix=self.__pipeline_start_file_prefix)
                 self.continueFastModality()
                 self.__fast_frame = 0
                 self.__validating = False
@@ -823,7 +842,8 @@ class EtMINFLUXController(QtCore.QObject):
 
     def postPipelineExperiment(self, coords_detected, roi_sizes):
         """ Called if in experiment mode, and returns MINFLUX scan coordinates according to GUI settings, detected or random. """
-        # if to generate random roi(s) from binary
+        new_event = False
+        # if to generate random roi(s) from binary, do that and use these as other detected coordinates
         if self.__random_roi_bin:
             coords_detected, coords_scan, roi_size = self.generateRandomCoord(roi_sizes)
         # else handle detected coordinates, if some events were detected
@@ -838,19 +858,19 @@ class EtMINFLUXController(QtCore.QObject):
                         areas_of_interest.append(pair)
                 else:
                     areas_of_interest.append(coords_detected[0])
-                self.__aoi_coords_deque = deque(areas_of_interest, maxlen=len(areas_of_interest))
-                coords_scan = self.__aoi_coords_deque.popleft()
-                self.__aoi_coords_deque.append(coords_scan)
+                self.__roi_events = deque(areas_of_interest, maxlen=len(areas_of_interest))
+                coords_scan = self.__roi_events.popleft()
+                self.__roi_events.append(coords_scan)
                 # if we do not preset ROI size, also make a deque for the detected roi_sizes
                 if not self.__presetROISize:
-                    self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
-                    roi_size = self.__aoi_sizes_deque.popleft()
-                    self.__aoi_sizes_deque.append(roi_size)
+                    self.__roi_sizes = deque(roi_sizes, maxlen=len(areas_of_interest))
+                    roi_size = self.__roi_sizes.popleft()
+                    self.__roi_sizes.append(roi_size)
                 else:
                     roi_size = None
                 self._widget.initiateButton.setText('Next ROI')
             # if we want to run all detected ROIs once
-            elif self.__run_all_aoi:
+            elif self.__trigger_all_roi:
                 # prep deques for coords and ROI sizes
                 areas_of_interest = list()
                 if np.size(coords_detected) > 2:
@@ -858,18 +878,18 @@ class EtMINFLUXController(QtCore.QObject):
                         areas_of_interest.append(pair)
                 else:
                     areas_of_interest.append(coords_detected[0])
-                self.__aoi_coords_deque = deque(areas_of_interest, maxlen=len(areas_of_interest))
-                coords_scan = self.__aoi_coords_deque.popleft()
+                self.__roi_events = deque(areas_of_interest, maxlen=len(areas_of_interest))
+                coords_scan = self.__roi_events.popleft()
                 # if we do not preset ROI size, also make a deque for the detected roi_sizes
                 if not self.__presetROISize:
-                    self.__aoi_sizes_deque = deque(roi_sizes, maxlen=len(areas_of_interest))
-                    roi_size = self.__aoi_sizes_deque.popleft()
+                    self.__roi_sizes = deque(roi_sizes, maxlen=len(areas_of_interest))
+                    roi_size = self.__roi_sizes.popleft()
                 else:
                     roi_size = None
                 self._widget.initiateButton.setText('Next ROI')
-            elif self.__exinfo is not None and (pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand'):
+            elif self.__exinfo is not None and ('_def' in pipelinename or '_rand' in pipelinename):
                 # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
-                idx = int(self.__exinfo)
+                idx = int(self.__exinfo)  # randomized or defined coord is returned in exinfo
                 if idx < len(coords_detected):
                     if np.size(coords_detected) > np.max([2,idx]):
                         coords_scan = coords_detected[idx,:]
@@ -895,13 +915,12 @@ class EtMINFLUXController(QtCore.QObject):
                     self._widget.initiateButton.setText('Next ROI')
             else:
                 # take brightest detected coord (and roi_size if applicable) as event
-                idx = 0
                 if np.size(coords_detected) > 2:
-                    coords_scan = coords_detected[idx,:]
+                    coords_scan = coords_detected[0,:]
                 else:
-                    coords_scan = coords_detected[idx]
+                    coords_scan = coords_detected[0]
                 if not self.__presetROISize:
-                    roi_size = roi_sizes[idx]
+                    roi_size = roi_sizes[0]
                 else:
                     roi_size = None
                 if self._widget.endlessScanCheck.isChecked():
@@ -910,7 +929,10 @@ class EtMINFLUXController(QtCore.QObject):
             coords_detected = np.array([])
             coords_scan = np.array([])
             roi_size = np.array([])
-        self.__coords_scan_curr = coords_scan
+        if len(coords_scan)>0:
+            self.__coords_scan_curr = coords_scan
+        else:
+            self.__coords_scan_curr = None
         return coords_detected, coords_scan, roi_size
 
     def postPipelineFollowingROISingleRedetect(self, coords_detected, roi_sizes):
@@ -988,9 +1010,9 @@ class EtMINFLUXController(QtCore.QObject):
             elif self.__followingROI:
                 self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, cycle=self.__roiFollowCurrCycle)
                 self.setDetLogLine(f"mfx_initiate-cycle{self.__roiFollowCurrCycle}", None)
-            elif self.__run_all_aoi:
-                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
-                self.setDetLogLine(f"mfx_initiate-id{self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque)}", None)
+            elif self.__trigger_all_roi:
+                self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan, idx=self.__roi_events.maxlen-len(self.__roi_events))
+                self.setDetLogLine(f"mfx_initiate-id{self.__roi_events.maxlen-len(self.__roi_events)}", None)
             else:
                 self.logCoordinates(coords_scan, coords_center_um, roi_size_um_scan)
                 self.setDetLogLine("mfx_initiate", None)
@@ -1001,6 +1023,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.pauseFastModality()
         self.endExperiment()
         self.__followingROIContinue = False
+        self.__followingROIEnding = False
         self.continueFastModality()
 
     def helpImageGeneration(self, coords_detected, roi_sizes):
@@ -1017,9 +1040,11 @@ class EtMINFLUXController(QtCore.QObject):
         if roi_idx > -1:
             self._widget.coordListWidget.list.takeItem(roi_idx)
             if self.__runMode == RunMode.Experiment:
-                del self.__aoi_coords_deque[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
+                # i-1 as we have already popped the first item that we are currently scanning from this deque
+                del self.__roi_events[roi_idx-1]
                 try:
-                    del self.__aoi_sizes_deque[roi_idx-1]  # i-1 as we have already popped the first item that we are currently scanning from this deque
+                    # i-1 as we have already popped the first item that we are currently scanning from this deque
+                    del self.__roi_sizes[roi_idx-1]
                 except:
                     print('roi sizes empty - preset size')
             self._widget.analysisHelpWidget.removeROI(roi_idx)
@@ -1050,9 +1075,9 @@ class EtMINFLUXController(QtCore.QObject):
         if self.__presetROISize:
             roi_size_um_scan = [float(self._widget.size_x_edit.text()), float(self._widget.size_y_edit.text())]
         else:
-            roi_size = self.__aoi_sizes_deque.popleft()
-            if self.__followingROI and self.__followingROIMode == ROIFollowMode.Multiple:
-                self.__aoi_sizes_deque.append(roi_size)
+            roi_size = self.__roi_sizes.popleft()
+            if (self.__followingROI) and (self.__followingROIMode == ROIFollowMode.Multiple):
+                self.__roi_sizes.append(roi_size)
             coord_um_top = self.transform([coords_scan[0]+roi_size[0]/2, coords_scan[1]+roi_size[1]/2], self.__confoffset, self.__transformCoeffs)
             coord_um_bot = self.transform([coords_scan[0]-roi_size[0]/2, coords_scan[1]-roi_size[1]/2], self.__confoffset, self.__transformCoeffs)
             roi_size_um_scan = np.subtract(coord_um_top, coord_um_bot)
@@ -1140,12 +1165,12 @@ class EtMINFLUXController(QtCore.QObject):
             self.startRecTimer()
         else:
             self.setMFXRecTime(0)
-        if self.__followingROI: # and self.__followingROIMode == ROIFollowMode.Multiple:
+        if self.__followingROI and (self.__followingROIMode == ROIFollowMode.Multiple or self.__followingROIMode == ROIFollowMode.Single or self.__followingROIMode == ROIFollowMode.SingleRedetect):
             self.setMFXDataTag(pos_conf, ROI_size, self.__roiFollowMultipleCurrIdx, self.__roiFollowCurrCycle)
         else:
-            self.setMFXDataTag(pos_conf, ROI_size, self.__aoi_coords_deque.maxlen-len(self.__aoi_coords_deque))
-        if self._act_lasers_present:
-            self.setMFXLasers(self.mfxth0_exc_laser, self.mfxth0_exc_pwr, 0, self.mfx_act_pwr)
+            self.setMFXDataTag(pos_conf, ROI_size, self.__roi_events.maxlen-len(self.__roi_events))
+        if self._act_lasers_present and self.mfx_act_laser != 'None':
+            self.setMFXLasers(self.mfxth0_exc_laser, self.mfxth0_exc_pwr, thread=0, act_laser=self.mfx_act_laser, act_pwr=self.mfx_act_pwr)
         else:
             self.setMFXLasers(self.mfxth0_exc_laser, self.mfxth0_exc_pwr, thread=0)
         channelDetectors = []
@@ -1186,9 +1211,19 @@ class EtMINFLUXController(QtCore.QObject):
         self.confPauseTimer.setInterval(self.pausetime)
         self.confPauseTimerThread.start()
         # for display countdown timer
-        self.confPauseGUICountdownTimer.setInterval(1)
+        self.confPauseGUICountdownTimer.setInterval(300)  # time in ms
         self.confPauseGUICountdownTimerThread.start()
         self.confIntervalDispTimer.start()
+
+    def startMultipleDetectMFXInitiationTimer(self):
+        time_window = int(1000 * 60 * float(self._widget.multiple_detect_window_edit.text()))  # min to s to ms
+        self.multipleEventDetectionTimer.setInterval(time_window)
+        self.multipleEventDetectionTimerThread.start()
+
+    def stopMultipleDetectMFXInitiationTimer(self):
+        if self.multipleEventDetectionTimer.isActive():
+            self.multipleEventDetectionTimer.stop()
+        self.multipleEventDetectionTimerThread.quit()
 
     def getConfocalInterval(self):
         self.__follow_roi_confocal_interval = int(self._widget.follow_roi_interval_edit.text())
@@ -1220,7 +1255,7 @@ class EtMINFLUXController(QtCore.QObject):
         y_pixels = self._imspector.value_at('ExpControl/scan/range/y/res', specpy.ValueTree.Measurement).get()
         self.__confoffset = [self._imspector.value_at('ExpControl/scan/range/x/off', specpy.ValueTree.Measurement).get()*1e6,
                              self._imspector.value_at('ExpControl/scan/range/y/off', specpy.ValueTree.Measurement).get()*1e6]
-        self.__confocalLinesFrame = y_pixels - 5
+        self.confocalLinesFrame = y_pixels - 5
         self.__transformCoeffs = [x_roisize, y_roisize, x_pixels, y_pixels]
 
     def setMFXSequence(self, mfx_seq, thread=0):
@@ -1229,7 +1264,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def setMFXDataTag(self, position, roi_size, roi_idx, cycle=None):
         """ Sets MINFLUX data tag, according to the event detection. """
-        datatag = 'ROI'+str(roi_idx)+'-Pos['+str(position[0])+','+str(position[1])+']'+'-Size['+f'{roi_size[0]:.2f}'+','+f'{roi_size[1]:.2f}'+']'
+        datatag = 'ROI'+str(roi_idx)+'-Pos['+str(int(position[0]))+','+str(int(position[1]))+']'+'-Size['+f'{roi_size[0]:.2f}'+','+f'{roi_size[1]:.2f}'+']'
         if self.__followingROI:
             rectime = float(self.__follow_roi_confocal_interval - self.__rec_time_deadtime * 2)
             datatag = datatag + '-RecTime['+str(rectime)+'s]'
@@ -1245,16 +1280,15 @@ class EtMINFLUXController(QtCore.QObject):
             rec_time_int = int(self.__rec_time_scan)
         self._imspector.value_at('Minflux/flow/stop_time', specpy.ValueTree.Measurement).set(rec_time_int)
 
-    def setMFXLasers(self, exc_laser, exc_pwr, thread=0, act_pwr=None):
+    def setMFXLasers(self, exc_laser, exc_pwr, thread=0, act_laser=None, act_pwr=None):
         """ Sets MINFLUX lasers and laser powers, according to the GUI choice of the user. """
         self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/exc', specpy.ValueTree.Measurement).set(exc_laser)
         self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/exp', specpy.ValueTree.Measurement).set(exc_pwr)
-        # set activation laser (405)
-        if act_pwr != None:
-            laser_status_act = True if act_pwr > 0 else False
-            # TODO: CHECK IF THIS WORKS AS INTENDED. SHOULD BE CORRECT FOR M2205 - HOW ABOUT FOR M2410?
-            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/active', specpy.ValueTree.Measurement).set(laser_status_act)
-            self._imspector.value_at('ExpControl/measurement/channels/0/lasers/0/power/calibrated', specpy.ValueTree.Measurement).set(act_pwr)
+        if act_laser is not None:
+            # set activation laser and power
+            self._imspector.value_at('Minflux/threads/settings/'+str(thread)+'/act', specpy.ValueTree.Measurement).set(act_laser)
+            self._imspector.value_at('Minflux/activation/mode', specpy.ValueTree.Measurement).set('manual')
+            self._imspector.value_at('Minflux/activation/limit', specpy.ValueTree.Measurement).set(act_pwr)
 
     def setMFXDetectorsChannels(self, detectors):
         """ Sets available MINFLUX detectors in the channels, according to the GUI choice of the user. """
@@ -1283,7 +1317,7 @@ class EtMINFLUXController(QtCore.QObject):
 
     def stopMFX(self):
         """ Stop MINFLUX measurement. """
-        self._imspector.pause()  # it is not this causing it
+        self._imspector.pause()
         self.__runningMFX = False
 
     def saveValidationImages(self, prev=True, prev_ana=True, path_prefix='YMD-HMS'):
@@ -1301,7 +1335,7 @@ class EtMINFLUXController(QtCore.QObject):
         meas.save_as(filePath)
         if self.__autoDelMFX:
             time.sleep(self.setupInfo.get('timing_settings').get('sleep_time_save'))
-            self.deleteMFXDataset(times=10)  # deletes 10 datasets, which should always be enough, no simple way to detect how many datasets there are
+            self.deleteMFXDataset(times=10)  # deletes 10 datasets, which should always be enough; no simple way to detect how many datasets there are
 
     def saveMeasurement(self):
         filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
@@ -1399,16 +1433,23 @@ class EtMINFLUXController(QtCore.QObject):
                 self._widget.mfx_rectime_edit.setEditable(True)
             self._widget.presetMfxRecTimeCheck.setEnabled(True)
             self.__followingROI = False
+            if self.__followingROIContinue:
+                self.__followingROIEnding = True
         else:
             self._widget.mfx_rectime_edit.setEditable(False)
             self._widget.presetMfxRecTimeCheck.setEnabled(False)
             self.__followingROI = True
+            self.__followingROIEnding = False
 
     def toggleTriggerAllROIs(self):
         if not self._widget.triggerAllROIsCheck.isChecked():
-            self.__run_all_aoi = False
+            self.__trigger_all_roi = False
         else:
-            self.__run_all_aoi = True
+            self.__trigger_all_roi = True
+
+    def toggleMultipleDetectionMFXInitiation(self):
+        self.__multipleDetectionMFXInitiation = True
+        self.stopMultipleDetectMFXInitiationTimer()
 
     def getPresetRoiSize(self, length):
         roi_sizes = []
@@ -1459,6 +1500,11 @@ class AnalysisImgHelper():
     def updateNumberEventsDisp(self, numEvents):
         self.etMINFLUXController._widget.coordListWidget.numevents_edit.setText(f'Number of detected events: {numEvents}')
 
+    def resetWidget(self):
+        self._widget.reset()
+        self._widget.scatterPlot.setData(x=[], y=[], pen=pg.mkPen(None))
+        self.etMINFLUXController._widget.multiMFXROIcoordListWidget.numevents_edit.setText(f'Number of detected events: -')
+
 
 class EventWidgetHelper():
     """ Event widget helper, with confocal image viewing and intensity plot; help controller. """
@@ -1484,8 +1530,8 @@ class EventWidgetHelper():
         self._widget.add_event(zoomstack, self.intensity_trace)
         self.event_coords = coords
 
-    def new_frame(self, frame, coords):
-        if coords == None:
+    def new_frame(self, frame, coords):  # TODO IMPLEMENT BETTER FOR MULTIPLE FOLLOW? THE SAME WAY AS FOR THE MULTIDETECTFOLLOW?
+        if coords is None:
             coords = self.event_coords
         zoomframe = frame[int(coords[1]-self.zoom_size):int(coords[1]+self.zoom_size+1), int(coords[0]-self.zoom_size):int(coords[0]+self.zoom_size+1)]
         newintensity = np.mean(zoomframe[int(self.zoom_size-self.intensity_size):int(self.zoom_size+self.intensity_size+1), int(self.zoom_size-self.intensity_size):int(self.zoom_size+self.intensity_size+1)], axis=(0,1))
@@ -1548,13 +1594,14 @@ class BinaryMaskHelper():
 
     def initiateBinaryMask(self):
         """ Initiate the process of calculating a binary mask of the region of interest. """
+        self.etMINFLUXController.getConfocalShape()
         self.etMINFLUXController.launchHelpWidget()
         self.binary_stack = []
         self.binary_frame = 0
         self.etMINFLUXController.confocalLinesAnalysisPeriod = self.etMINFLUXController._imspector.active_measurement().stack(0).sizes()[0] - 7
         self.etMINFLUXController.confocalLineCurr = 0
         self.etMINFLUXController._imspector.connect_end(self.imspectorLineEventBinaryMask, 1)
-        self.startConfocalScanning(reconnect_signal=False)
+        self.etMINFLUXController.startConfocalScanning(reconnect_signal=False)
         self._widget.recordBinaryMaskButton.setText('Recording...')
 
     def resetBinaryMask(self):
@@ -1564,7 +1611,7 @@ class BinaryMaskHelper():
 
     def imspectorLineEventBinaryMask(self):
         self.etMINFLUXController.confocalLineCurr += 1
-        if self.etMINFLUXController.confocalLineCurr == self.etMINFLUXController.confocalLinesAnalysisPeriod:
+        if self.etMINFLUXController.confocalLineCurr >= self.etMINFLUXController.confocalLinesFrame:
             self.etMINFLUXController.confocalLineCurr = 0
             # get image
             meas = self.etMINFLUXController._imspector.active_measurement()
@@ -1576,7 +1623,7 @@ class BinaryMaskHelper():
     def calculateBinaryMask(self):
         """ Calculate the binary mask of the region of interest, using both positive and negative masks. """
         self.etMINFLUXController._imspector.pause()
-        img_mean = np.mean(self.etMINFLUXController.binary_stack, 0)
+        img_mean = np.mean(self.binary_stack, 0)
         img_bin_pos = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_smooth_edit.text()))
         img_bin_neg = ndi.filters.gaussian_filter(img_mean, float(self._widget.bin_neg_smooth_edit.text()))
         img_bin_pos = np.array(img_bin_pos > float(self._widget.bin_thresh_edit.text()))
@@ -1600,6 +1647,7 @@ class ROIFollowMode(enum.Enum):
     Single = 1
     Multiple = 2
     SingleRedetect = 3
+    MultipleDetect = 4
 
 
 def insertSuffix(filename, suffix, newExt=None):
@@ -1620,80 +1668,11 @@ def getUniqueName(name):
         n += 1
     return ''.join((name, ext))
 
-
-class ImspectorMock():
-    """ Mock Imspector object, that handles the calls made from the EtMINFLUXController object above. """
-    def __init__(self, *args, **kwargs):
-        self._active_measurement = Measurement()
-
-    def active_measurement(self):
-        return self._active_measurement
-    
-    def value_at(self, path, valTree):
-        return ValueAt()
-
-    def start(self):
-        pass
-
-    def run(self):
-        pass
-
-    def pause(self):
-        pass
+def eucl_dist(a,b):
+    return np.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2)
 
 
-class Measurement():
-    def __init__(self, *args, **kwargs):
-        self._stack = Stack()
-
-    def stack(self, val):
-        return self._stack.data()
-    
-    def configuration(self, cfg_name):
-        return Configuration(cfg_name)
-
-    def activate(self, cfg):
-        self._configuration = cfg
-
-
-class Configuration():
-    def __init__(self, name, *args, **kwargs):
-        self._name = name
-
-
-class Stack():
-    def __init__(self, *args, **kwargs):
-        self._data = Data(3,100,100)
-
-    def data(self):
-        return self._data
-
-class Data():
-    def __init__(self, z, x, y, *args, **kwargs):
-        self._data = np.zeros((z,x,y))
-        self._sizes = (x,y)
-
-    def data(self):
-        return self._data
-    
-    def sizes(self):
-        return self._sizes    
-
-class ValueAt():
-    def __init__(self, *args, **kwargs):
-        self._val = False
-
-    def get(self):
-        self._val
-
-    def set(self, val):
-        self._val = val
-    
-    def trigger(self):
-        pass
-
-
-# Copyright (C) 2023-2025 Jonatan Alvelid
+# Copyright (C) 2023-2026 Jonatan Alvelid
 #
 # EtMINFLUX is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

@@ -1,6 +1,6 @@
 import numpy as np
 
-def pipeline_fake(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, xcoord=300, ycoord=300):
+def pipeline_fake(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, xcoord=100, ycoord=100):
     """ Fake analysis pipeline, that just returns the coordinates of a single point based on the provided x and y coordinates. """
     roi_sizes = False
     coordinates = np.array([[xcoord, ycoord]])

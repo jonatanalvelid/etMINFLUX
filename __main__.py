@@ -25,11 +25,9 @@ if __name__ == "__main__":
             print('Imspector not loaded. Continuing in simulation mode.')
 
     if simulation_mode:
-        print("load simulation")
         widget = EtMINFLUXWidgetSim()
         controller = EtMINFLUXControllerSim(widget)
     else:
-        print("load real system")
         widget = EtMINFLUXWidget()
         controller = EtMINFLUXController(widget)
 

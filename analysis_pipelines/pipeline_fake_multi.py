@@ -1,6 +1,6 @@
 import numpy as np
 
-def pipeline_fake_multi(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, xcoord1=300, ycoord1=300, xcoord2=500, ycoord2=500, xcoord3=400, ycoord3=200):
+def pipeline_fake_multi(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None, xcoord1=100, ycoord1=100, xcoord2=20, ycoord2=20, xcoord3=60, ycoord3=60):
     """ Fake analysis pipeline, that just returns the coordinates of three points based on the provided x and y coordinates. """
     roi_sizes = False
     coordinates = np.array([[xcoord1, ycoord1],[xcoord2, ycoord2],[xcoord3, ycoord3]])

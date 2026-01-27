@@ -6,7 +6,7 @@ import math
 
 def peak_detection_rand(img_ch1, prev_frames=None, binary_mask=None, exinfo=None, presetROIsize=None,
                        maxfilter_kersize=5, peak_min_dist=7, thresh_abs=10, num_peaks=50, smoothing_radius=1, 
-                       border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6, coord_num_lim_lo=10, coord_num_lim_hi=25):
+                       border_limit=15, init_smooth=1, roi_border=3, roi_th_factor=6, coord_num_lim_lo=0, coord_num_lim_hi=25):
     
     """
       Analysis pipeline similar to the other peak detection pipelines, but returning a random peak index.
@@ -109,6 +109,9 @@ def peak_detection_rand(img_ch1, prev_frames=None, binary_mask=None, exinfo=None
     coordinates = np.flip(coordinates, axis=1)
 
     # generate random coordinate number to use from the user-provided inputs
-    coord_num = np.random.randint(coord_num_lim_lo, np.min([coord_num_lim_hi, len(coordinates)]))  ### DOUBLE TEST THAT THIS WORKS
+    if len(coordinates)>0:
+        coord_num = np.random.randint(coord_num_lim_lo, np.min([coord_num_lim_hi, len(coordinates)]))
+    else:
+        coord_num=0
 
     return coordinates, roi_sizes, coord_num, img_ana

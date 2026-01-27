@@ -28,11 +28,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # generate dropdown list for analysis pipelines
         self.analysisPipelines = list()
         self.analysisPipelinePar = ComboBox()
-        # generate dropdown list for coordinate transformations
-        self.transformPipelines = list()
-        self.transformPipelinePar = ComboBox()
-        self.transformPipelinePar.setEnabled(False)
-        self.transformPipelineLabel = FieldLabel('Transform pipeline')
         # add all experiment modes in a dropdown list
         self.experimentModes = ['Experiment','TestVisualize','TestValidate']
         self.experimentModesPar = ComboBox()
@@ -86,17 +81,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.confocalFramePauseCheck = CheckBox('Confocal frame pause (s)')
         # create check box for using two-threaded MINFLUX recording
         self.twoThreadsMFXCheck = CheckBox('Two-threaded MINFLUX')
-        # create editable fields for binary mask calculation threshold and smoothing
-        self.bin_thresh_label = FieldLabel('Bin. pos. threshold (cnts)')
-        self.bin_thresh_edit = LineEdit(str(0))
-        self.bin_smooth_label = FieldLabel('Bin. pos. smooth (px)')
-        self.bin_smooth_edit = LineEdit(str(0))
-        self.bin_neg_thresh_label = FieldLabel('Bin. neg. threshold (cnts)')
-        self.bin_neg_thresh_edit = LineEdit(str(0))
-        self.bin_neg_smooth_label = FieldLabel('Bin. neg. smooth (px)')
-        self.bin_neg_smooth_edit = LineEdit(str(0))
-        self.bin_border_size_label = FieldLabel('Bin. border size (px)')
-        self.bin_border_size_edit = LineEdit(str(0))
         # create editable field for number of initial frames without analysis
         self.init_frames_label = FieldLabel('Initial frames')
         self.init_frames_edit = LineEdit(str(0))
@@ -136,18 +120,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_act_laser_par = ComboBox()
         self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
         self.mfx_act_pwr_edit = LineEdit(str(0))
-        self.mfx_act_pwr_edit.setEditable(False)
         # disable th1 fields by default
         self.mfxth1_seq_par.setEnabled(False)
-        self.mfx_act_laser_par.setEnabled(False)
         self.mfxth1_seq_label.setStyleSheet('color: rgb(83,83,83);')
-        self.mfx_act_pwr_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_exc_laser_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_exc_pwr_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_detector_label.setStyleSheet('color: rgb(83,83,83);')
-        self.mfx_act_laser_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_seq_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
-        self.mfx_act_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         self.mfxth1_exc_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         self.mfxth1_detector_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         # create editable fields for analysis control parameters
@@ -285,12 +264,11 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         currentRow += 1
         self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
         self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
-        self.grid.addWidget(self.transformPipelineLabel, currentRow, 2)
-        self.grid.addWidget(self.transformPipelinePar, currentRow, 3)
+        self.grid.addWidget(self.softResetButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
-        self.grid.addWidget(self.conf_frame_edit, currentRow, 2, 1, 2)
-        self.grid.addWidget(self.softResetButton, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
@@ -307,16 +285,17 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         
     def setDefaultValues(self, setupInfo: dict, activation_lasers_present: bool):
         """ Set default values from the setup info dictionary loaded from json file. """
+        # set confocal template settings default values
+        self.coordTransformWidget.template_conf_stackidx_edit.setText(str(setupInfo.get('acquisition_settings').get('confocal_stack_idx')))
         # set binary mask calculation default values
-        self.bin_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_thresh_def')))
-        self.bin_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_smooth_def')))
-        self.bin_neg_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_thresh_def')))
-        self.bin_neg_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_smooth_def')))
-        self.bin_border_size_edit.setText(str(setupInfo.get('analysis_settings').get('binary_border_size_def')))
+        self.binaryMaskWidget.bin_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_thresh_def')))
+        self.binaryMaskWidget.bin_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_smooth_def')))
+        self.binaryMaskWidget.bin_neg_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_thresh_def')))
+        self.binaryMaskWidget.bin_neg_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_smooth_def')))
+        self.binaryMaskWidget.bin_border_size_edit.setText(str(setupInfo.get('analysis_settings').get('binary_border_size_def')))
         # set MINFLUX laser power default values
         self.mfxth0_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_def')))
         self.mfxth1_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_th1_def')))
-        self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
         # set MINFLUX ROI size and recording time default values
         self.size_x_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_x_def')))
         self.size_y_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_y_def')))
@@ -330,6 +309,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # activation laser powers default values
         if activation_lasers_present:
             self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
+            self.mfx_act_pwr_edit.setEditable(True)
+        else:
+            self.mfx_act_pwr_edit.setEditable(False)
+            self.mfx_act_pwr_label.setStyleSheet('color: rgb(83,83,83);')
+            self.mfx_act_laser_label.setStyleSheet('color: rgb(83,83,83);')
+            self.mfx_act_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self.mfx_act_laser_par.setEnabled(False)
 
     def initParamFields(self, parameters: dict, params_exclude: list, conf_channels: int):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -368,15 +354,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.analysisPipelinePar.addItems(self.analysisPipelines)
         self.analysisPipelinePar.setCurrentIndex(0)
 
-    def setTransformations(self, transformDir):
-        """ Set combobox with available coordinate transformations to use. """
-        for transform in os.listdir(transformDir):
-            if os.path.isfile(os.path.join(transformDir, transform)):
-                transform = transform.split('.')[0]
-                self.transformPipelines.append(transform)
-        self.transformPipelinePar.addItems(self.transformPipelines)
-        self.transformPipelinePar.setCurrentIndex(0)
-
     def setMfxSequenceList(self, mfxSeqs, thread=0):
         """ Set combobox with available minflux sequences to use. """
         self.mfx_seqs = mfxSeqs
@@ -399,7 +376,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
     def setMinfluxActLaserList(self, actLasers):
         """ Set combobox with available excitation lasers to use. """
-        self.mfx_act_lasers = actLasers
+        self.mfx_act_lasers = ['None']+actLasers
         self.mfx_act_laser_par.addItems(self.mfx_act_lasers)
         self.mfx_act_laser_par.setCurrentIndex(0)
 
@@ -744,9 +721,19 @@ class CoordTransformWidget(QtWidgets.QWidget):
 
         # Create titles
         self.gui_calibration_title = TitleLabel('GUI calibration')
-        self.timing_title = TitleLabel('Timing')
-        self.dists_title = TitleLabel('Distances')
+        self.template_title = TitleLabel('Template calibration')
         self.saving_title = TitleLabel('Saving')
+        self.transform_title = TitleLabel('Transform')
+
+        # generate dropdown list for coordinate transformations
+        self.transformPipelines = list()
+        self.transformPipelinePar = ComboBox()
+        self.transformPipelinePar.setEnabled(False)
+        self.transformPipelineLabel = FieldLabel('Transform pipeline')
+
+        # generate fields for the template settings
+        self.template_conf_stackidx_label = FieldLabel('Confocal stack index')
+        self.template_conf_stackidx_edit = LineEdit(str(0))
 
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
@@ -755,12 +742,22 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow = 0
         self.grid.addWidget(self.gui_calibration_title, currentRow, 0, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 2)
+        self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 0, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.template_title, currentRow, 0, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.template_conf_stackidx_label, currentRow, 0)
+        self.grid.addWidget(self.template_conf_stackidx_edit, currentRow, 1, 1, 2)
         currentRow += 1
         self.grid.addWidget(self.saving_title, currentRow, 0, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.setSaveDirButton, currentRow, 0)
         self.grid.addWidget(self.save_dir_edit, currentRow, 1, 1, 2)
+        currentRow += 1
+        self.grid.addWidget(self.transform_title, currentRow, 0, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.transformPipelineLabel, currentRow, 0)
+        self.grid.addWidget(self.transformPipelinePar, currentRow, 1, 1, 2)
         
         frame_gm = self.frameGeometry()
         topLeftPoint = QPoint(0,670)
@@ -775,6 +772,15 @@ class CoordTransformWidget(QtWidgets.QWidget):
     
     def setSaveFolderField(self, folder):
         self.save_dir_edit.setText(folder)
+
+    def setTransformations(self, transformDir):
+        """ Set combobox with available coordinate transformations to use. """
+        for transform in os.listdir(transformDir):
+            if os.path.isfile(os.path.join(transformDir, transform)):
+                transform = transform.split('.')[0]
+                self.transformPipelines.append(transform)
+        self.transformPipelinePar.addItems(self.transformPipelines)
+        self.transformPipelinePar.setCurrentIndex(0)
 
 
 class BinaryMaskWidget(QtWidgets.QWidget):

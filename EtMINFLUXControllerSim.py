@@ -235,28 +235,21 @@ class EtMINFLUXControllerSim(QtCore.QObject):
 
     def confocalIntermittentPause(self):
         """ Pause confocal scanning for a certain time in a confocal timelapse without continuous acquisition. """
-        print('Running status in confocalIntermittentPause:', self.__running)
         if self.__running:
             if self.confPauseTimer.isActive():
                 self.confPauseTimer.stop()
                 self.confPauseGUICountdownTimer.stop()
-            print('mid confocalIntermittentPause')
-            print(self.confPauseTimerThread.isRunning())
             self.confPauseTimerThread.quit()
             self.confPauseGUICountdownTimerThread.quit()
             self.startConfPauseTimer()
-            print('Finish confocalIntermittentPause')
         else:
             self.resetTimerThreads()
 
     def startConfocalScanning(self):
         """ Start confocal pulling of images. """
-        print('Start startconfocalscanning')
         self.analysisPeriodTrigger()
         self.bufferLatestImages()
         self.confocalIntermittentPause()
-        print('Finish startconfocalscanning')
-        print(self.__running)
 
     def setDetLogLine(self, key, val, *args):
         """ Set a line of the event detection log. """
@@ -739,15 +732,12 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.recTimeTimerThread.start()
 
     def startConfPauseTimer(self):
-        print('Start confocal pause timer for ', self.pausetime/1000, 's')
         self.confPauseTimer.setInterval(self.pausetime)
         self.confPauseTimerThread.start()
         # for display countdown timer
-        print('mid startConfPauseTimer')
         self.confPauseGUICountdownTimer.setInterval(1)
         self.confPauseGUICountdownTimerThread.start()
         self.confIntervalDispTimer.start()
-        print('Finish startConfPauseTimer')
 
     def updateIntervalTimerDisp(self):
         time_left = (self.pausetime - self.confIntervalDispTimer.elapsed())/1000

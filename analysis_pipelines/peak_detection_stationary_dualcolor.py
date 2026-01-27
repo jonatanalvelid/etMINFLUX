@@ -122,7 +122,7 @@ def peak_detection_stationary_dualcolor(img_ch1, img_ch2, prev_frames=None, bina
     
     coords_events = np.array(coords_events)
     
-    # generate random coordinate number to use from the user-provided inputs
+    # generate random coordinate number to use from the user-provided inputs, return only one
     if len(coords_events) > 0:
         coord_num = np.random.randint(0, len(coords_events))
         coords_event_return = coords_events[coord_num]
