@@ -53,7 +53,7 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.initiateButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.loadPipelineButton = PushButton('Load pipeline')
         # create buttons for calibrating coordinate transform, recording binary mask, save current measurement, and start a multiple event detection ROI following experiment manually
-        self.coordTransfCalibButton = PushButton('Calibration settings...')
+        self.miscSettingsButton = PushButton('Misc. settings...')
         self.saveCurrentMeasButton = PushButton('Save curr. meas.')
         self.openGuideButton = PushButton('Open guide...')
         self.binaryMaskButton = PushButton('Binary mask settings...')
@@ -76,11 +76,6 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.lineWiseAnalysisCheck = CheckBox('Run analysis pipeline linewise')
         # create check box for randomizing ROIs from binary mask
         self.triggerRandomROICheck = CheckBox('Random ROI (bin)')
-        # create check box for automatic saving
-        self.autoSaveCheck = CheckBox('Auto-save .msr after event')
-        self.autoSaveCheck.setChecked(False)
-        self.autoDeleteMFXDatasetCheck = CheckBox('Auto-delete mfx data after save')
-        self.autoDeleteMFXDatasetCheck.setChecked(False)
         # create check box for plotting ROI even in experiment mode
         self.plotROICheck = CheckBox('Plot ROI (experiment mode)')
         # create check box for confocal monitoring pausing between frames
@@ -126,18 +121,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.mfx_act_laser_par = ComboBox()
         self.mfx_act_pwr_label = FieldLabel('MFX act power (%)')
         self.mfx_act_pwr_edit = LineEdit(str(0))
-        self.mfx_act_pwr_edit.setEditable(False)
         # disable th1 fields by default
         self.mfxth1_seq_par.setEnabled(False)
-        self.mfx_act_laser_par.setEnabled(False)
         self.mfxth1_seq_label.setStyleSheet('color: rgb(83,83,83);')
-        self.mfx_act_pwr_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_exc_laser_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_exc_pwr_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_detector_label.setStyleSheet('color: rgb(83,83,83);')
-        self.mfx_act_laser_label.setStyleSheet('color: rgb(83,83,83);')
         self.mfxth1_seq_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
-        self.mfx_act_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         self.mfxth1_exc_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         self.mfxth1_detector_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
         # create editable fields for analysis control parameters
@@ -147,13 +137,13 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.conf_frame_pause_edit.setEditable(False)
         # create editable fields for ROI following mode
         self.follow_roi_interval_label = FieldLabel('Confocal interval (s)')
-        self.follow_roi_interval_edit = LineEdit(str(30))
+        self.follow_roi_interval_edit = LineEdit(str(0))
         self.follow_roi_redetectthresh_label = FieldLabel('Redetect dist threshold (px)')
-        self.follow_roi_redetectthresh_edit = LineEdit(str(20))
+        self.follow_roi_redetectthresh_edit = LineEdit(str(0))
         self.multiple_detect_window_label = FieldLabel('MultiDetect event detection window (min)')
-        self.multiple_detect_window_edit = LineEdit(str(15))
+        self.multiple_detect_window_edit = LineEdit(str(0))
         self.mfx_phase_eventlim_label = FieldLabel('MultiDetect events to start MFX phase')
-        self.mfx_phase_eventlim_edit = LineEdit(str(500))
+        self.mfx_phase_eventlim_edit = LineEdit(str(0))
         # create GUI group titles
         self.misc_title = TitleLabel('Transform, calibration, saving, guide, binary mask')
         self.minflux_title = TitleLabel('MINFLUX imaging parameters')
@@ -282,19 +272,14 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         self.grid.addWidget(self.confocalFramePauseCheck, currentRow, 0)
         self.grid.addWidget(self.conf_frame_pause_edit, currentRow, 1)
         self.grid.addWidget(self.saveCurrentMeasButton, currentRow, 2)
-        self.grid.addWidget(self.autoSaveCheck, currentRow, 3)
-        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 4)
+        self.grid.addWidget(self.miscSettingsButton, currentRow, 3)
+        self.grid.addWidget(self.binaryMaskButton, currentRow, 4)
         currentRow += 1
         self.grid.addWidget(self.conf_guipausetimer_edit, currentRow, 0, 1, 2)
         self.grid.addWidget(self.openGuideButton, currentRow, 2)
-        self.grid.addWidget(self.coordTransfCalibButton, currentRow, 3)
-        self.grid.addWidget(self.binaryMaskButton, currentRow, 4)
-        currentRow += 1
-        self.grid.addWidget(self.transformPipelineLabel, currentRow, 2)
-        self.grid.addWidget(self.transformPipelinePar, currentRow, 3)
-        currentRow += 1
-        self.grid.addWidget(self.conf_frame_edit, currentRow, 2, 1, 2)
         self.grid.addWidget(self.softResetButton, currentRow, 4)
+        currentRow += 1
+        self.grid.addWidget(self.conf_frame_edit, currentRow, 0, 1, 2)
 
         frame_gm = self.frameGeometry()
         topLeftPoint = QtWidgets.QApplication.desktop().availableGeometry().topLeft()
@@ -316,16 +301,17 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         
     def setDefaultValues(self, setupInfo: dict, activation_lasers_present: bool):
         """ Set default values from the setup info dictionary loaded from json file. """
+        # set confocal template settings default values
+        self.coordTransformWidget.template_conf_stackidx_edit.setText(str(setupInfo.get('acquisition_settings').get('confocal_stack_idx')))
         # set binary mask calculation default values
-        self.bin_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_thresh_def')))
-        self.bin_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_smooth_def')))
-        self.bin_neg_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_thresh_def')))
-        self.bin_neg_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_smooth_def')))
-        self.bin_border_size_edit.setText(str(setupInfo.get('analysis_settings').get('binary_border_size_def')))
+        self.binaryMaskWidget.bin_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_thresh_def')))
+        self.binaryMaskWidget.bin_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_pos_smooth_def')))
+        self.binaryMaskWidget.bin_neg_thresh_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_thresh_def')))
+        self.binaryMaskWidget.bin_neg_smooth_edit.setText(str(setupInfo.get('analysis_settings').get('binary_neg_smooth_def')))
+        self.binaryMaskWidget.bin_border_size_edit.setText(str(setupInfo.get('analysis_settings').get('binary_border_size_def')))
         # set MINFLUX laser power default values
         self.mfxth0_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_def')))
         self.mfxth1_exc_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_exc_power_th1_def')))
-        self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
         # set MINFLUX ROI size and recording time default values
         self.size_x_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_x_def')))
         self.size_y_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_roisize_y_def')))
@@ -336,9 +322,18 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         # set ROI following mode default values
         self.follow_roi_interval_edit.setText(str(setupInfo.get('roi_following_settings').get('confocal_interval_def')))
         self.follow_roi_redetectthresh_edit.setText(str(setupInfo.get('roi_following_settings').get('redetect_dist_thresh_def')))
+        self.multiple_detect_window_edit.setText(str(setupInfo.get('roi_following_settings').get('multidetect_event_det_wind')))
+        self.mfx_phase_eventlim_edit.setText(str(setupInfo.get('roi_following_settings').get('multidetect_events_to_start')))
         # activation laser powers default values
         if activation_lasers_present:
             self.mfx_act_pwr_edit.setText(str(setupInfo.get('acquisition_settings').get('minflux_act_power_def')))
+            self.mfx_act_pwr_edit.setEditable(True)
+        else:
+            self.mfx_act_pwr_edit.setEditable(False)
+            self.mfx_act_pwr_label.setStyleSheet('color: rgb(83,83,83);')
+            self.mfx_act_laser_label.setStyleSheet('color: rgb(83,83,83);')
+            self.mfx_act_laser_par.setStyleSheet('background-color: rgb(50,50,50); color: rgb(83,83,83); border: 1px solid rgb(100,100,100); selection-color: rgb(217,83,0); selection-background-color: rgb(30,30,30);')
+            self.mfx_act_laser_par.setEnabled(False)
 
     def initParamFields(self, parameters: dict, params_exclude: list, conf_channels: int):
         """ Initialized event-triggered analysis pipeline parameter fields. """
@@ -438,8 +433,10 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
 
 class AnalysisWidget(QtWidgets.QWidget):
     """ Pop-up widget for the live analysis images or binary masks. """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, widgetid, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.widgetid = widgetid
 
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
@@ -757,9 +754,25 @@ class CoordTransformWidget(QtWidgets.QWidget):
 
         # Create titles
         self.gui_calibration_title = TitleLabel('GUI calibration')
-        self.timing_title = TitleLabel('Timing')
-        self.dists_title = TitleLabel('Distances')
+        self.template_title = TitleLabel('Template calibration')
         self.saving_title = TitleLabel('Saving')
+        self.transform_title = TitleLabel('Transform')
+
+        # generate dropdown list for coordinate transformations
+        self.transformPipelines = list()
+        self.transformPipelinePar = ComboBox()
+        self.transformPipelinePar.setEnabled(False)
+        self.transformPipelineLabel = FieldLabel('Transform pipeline')
+
+        # generate fields for the template settings
+        self.template_conf_stackidx_label = FieldLabel('Confocal stack index')
+        self.template_conf_stackidx_edit = LineEdit(str(0))
+
+        # create check box for automatic saving
+        self.autoSaveCheck = CheckBox('Auto-save .msr after event')
+        self.autoSaveCheck.setChecked(True)
+        self.autoDeleteMFXDatasetCheck = CheckBox('Auto-delete mfx data after save')
+        self.autoDeleteMFXDatasetCheck.setChecked(False)
 
         # generate GUI layout
         self.grid = QtWidgets.QGridLayout()
@@ -768,12 +781,25 @@ class CoordTransformWidget(QtWidgets.QWidget):
         currentRow = 0
         self.grid.addWidget(self.gui_calibration_title, currentRow, 0, 1, 3)
         currentRow += 1
-        self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 2)
+        self.grid.addWidget(self.setDeleteMFXDatasetButton, currentRow, 0, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.template_title, currentRow, 0, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.template_conf_stackidx_label, currentRow, 0)
+        self.grid.addWidget(self.template_conf_stackidx_edit, currentRow, 1, 1, 2)
         currentRow += 1
         self.grid.addWidget(self.saving_title, currentRow, 0, 1, 3)
         currentRow += 1
         self.grid.addWidget(self.setSaveDirButton, currentRow, 0)
         self.grid.addWidget(self.save_dir_edit, currentRow, 1, 1, 2)
+        currentRow += 1
+        self.grid.addWidget(self.autoSaveCheck, currentRow, 0)
+        self.grid.addWidget(self.autoDeleteMFXDatasetCheck, currentRow, 1)
+        currentRow += 1
+        self.grid.addWidget(self.transform_title, currentRow, 0, 1, 3)
+        currentRow += 1
+        self.grid.addWidget(self.transformPipelineLabel, currentRow, 0)
+        self.grid.addWidget(self.transformPipelinePar, currentRow, 1, 1, 2)
         
         frame_gm = self.frameGeometry()
         topLeftPoint = QPoint(0,670)
@@ -788,6 +814,15 @@ class CoordTransformWidget(QtWidgets.QWidget):
     
     def setSaveFolderField(self, folder):
         self.save_dir_edit.setText(folder)
+
+    def setTransformations(self, transformDir):
+        """ Set combobox with available coordinate transformations to use. """
+        for transform in os.listdir(transformDir):
+            if os.path.isfile(os.path.join(transformDir, transform)):
+                transform = transform.split('.')[0]
+                self.transformPipelines.append(transform)
+        self.transformPipelinePar.addItems(self.transformPipelines)
+        self.transformPipelinePar.setCurrentIndex(0)
 
 
 class BinaryMaskWidget(QtWidgets.QWidget):

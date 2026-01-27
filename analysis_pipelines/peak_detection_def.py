@@ -107,5 +107,6 @@ def peak_detection_def(img_ch1, prev_frames=None, binary_mask=None, exinfo=None,
             roi_sizes.append(roi_size)
 
     coordinates = np.flip(coordinates, axis=1)
+    coordinates = np.array([coordinates[int(coord_num)]])
 
     return coordinates, roi_sizes, coord_num, img_ana

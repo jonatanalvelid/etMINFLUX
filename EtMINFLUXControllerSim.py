@@ -603,64 +603,18 @@ class EtMINFLUXControllerSim(QtCore.QObject):
             coords_detected, coords_scan, roi_size = self.generateRandomCoord(roi_sizes)
         # else handle detected coordinates, if some events were detected
         elif coords_detected.size != 0:
-            pipelinename = self.getPipelineName()
-            # if we want to run all detected ROIs once
-            if self.__run_all_aoi:
-                # prep deques for coords and ROI sizes
-                areas_of_interest = list()
-                if np.size(coords_detected) > 2:
-                    for pair in coords_detected:
-                        areas_of_interest.append(pair)
-                else:
-                    areas_of_interest.append(coords_detected[0])
-                self.__roi_events = deque(areas_of_interest, maxlen=len(areas_of_interest))
-                coords_scan = self.__roi_events.popleft()
-                # if we do not preset ROI size, also make a deque for the detected roi_sizes
-                if not self.__presetROISize:
-                    self.__roi_sizes = deque(roi_sizes, maxlen=len(areas_of_interest))
-                    roi_size = self.__roi_sizes.popleft()
-                else:
-                    roi_size = None
-                self._widget.initiateButton.setText('Next ROI')
-            elif self.__exinfo is not None and (pipelinename=='peak_detection_def' or pipelinename=='peak_detection_rand'):
-                # take specified detected coord (and roi_size if applicable) as event (idx = 0 if we want brightest)
-                idx = int(self.__exinfo)
-                if idx < len(coords_detected):
-                    if np.size(coords_detected) > np.max([2,idx]):
-                        coords_scan = coords_detected[idx,:]
-                    else:
-                        coords_scan = coords_detected[0]
-                    if not self.__presetROISize:
-                        if np.size(coords_detected) > np.max([2,idx]):
-                            roi_size = roi_sizes[idx]
-                        else:
-                            roi_size = roi_sizes[0]
-                    else:
-                        roi_size = None
-                else:  # if defined coordinate is higher than the number of detected coords, take the last detected coord
-                    if np.size(coords_detected) > 2:
-                        coords_scan = coords_detected[-1,:]
-                    else:
-                        coords_scan = coords_detected[0]
-                    if not self.__presetROISize:
-                        roi_size = roi_sizes[-1]
-                    else:
-                        roi_size = None
-                if self._widget.endlessScanCheck.isChecked():
-                    self._widget.initiateButton.setText('Next ROI')
+            # take first listed detected coord (and roi_size if applicable), if multiple, as event
+            idx = 0
+            if np.size(coords_detected) > 2:
+                coords_scan = coords_detected[idx,:]
             else:
-                # take brightest detected coord (and roi_size if applicable) as event
-                idx = 0
-                if np.size(coords_detected) > 2:
-                    coords_scan = coords_detected[idx,:]
-                else:
-                    coords_scan = coords_detected[idx]
-                if not self.__presetROISize:
-                    roi_size = roi_sizes[idx]
-                else:
-                    roi_size = None
-                if self._widget.endlessScanCheck.isChecked():
-                    self._widget.initiateButton.setText('Next ROI')
+                coords_scan = coords_detected[idx]
+            if not self.__presetROISize:
+                roi_size = roi_sizes[idx]
+            else:
+                roi_size = None
+            if self._widget.endlessScanCheck.isChecked():
+                self._widget.initiateButton.setText('Next ROI')
         else:
             coords_detected = np.array([])
             coords_scan = np.array([])
