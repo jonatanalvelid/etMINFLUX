@@ -138,7 +138,9 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.__confocalFramePause = False
         self.__count_conf_channels = 1
         self.__img_ana = None
-        self._preloaded_confocal_data = deque()
+        self._preloaded_confocal_data_ch1 = deque()
+        self._preloaded_confocal_data_ch2 = deque()
+        self._preloaded_confocal_data_ch3 = deque()
         self.__prev_event_coords_deque = deque(maxlen=100)
         self.__prevFrames = deque(maxlen=50)  # deque for previous fast frames
         self.__prevAnaFrames = deque(maxlen=50)  # deque for previous preprocessed analysis frames
@@ -168,10 +170,36 @@ class EtMINFLUXControllerSim(QtCore.QObject):
             confocal_data = tiff.imread(confocal_data_file)
         else:
             confocal_data = None
-        self._preloaded_confocal_data = deque()
-        for img in confocal_data:
-            self._preloaded_confocal_data.append(img)
-        self._preloaded_confocal_data.append(np.zeros_like(confocal_data[0]))  # add an empty image at the end, for resetting analysis
+        self._preloaded_confocal_data1 = deque()
+        self._preloaded_confocal_data2 = deque()
+        self._preloaded_confocal_data3 = deque()
+        # get number of frames and channels in the loaded stack (from ImageJ hyperstack)
+        frames = np.shape(confocal_data)[0]
+        if len(np.shape(confocal_data))>3:
+            channels = np.shape(confocal_data)[1]
+        else:
+            channels = 1
+        if channels==1:
+            ch1 = confocal_data
+            for img in ch1:
+                self._preloaded_confocal_data1.append(img)
+            self._preloaded_confocal_data1.append(np.zeros_like(ch1[0]))  # add an empty image at the end, for resetting analysis
+        else:
+            ch1 = confocal_data[:,0]
+            for img in ch1:
+                self._preloaded_confocal_data1.append(img)
+            self._preloaded_confocal_data1.append(np.zeros_like(ch1[0]))  # add an empty image at the end, for resetting analysis
+        if channels>=2:
+            ch2 = confocal_data[:,1]
+            for img in ch2:
+                self._preloaded_confocal_data2.append(img)
+            self._preloaded_confocal_data2.append(np.zeros_like(ch2[0]))  # add an empty image at the end, for resetting analysis
+        if channels>=3:
+            ch3 = confocal_data[:,2]
+            for img in ch3:
+                self._preloaded_confocal_data3.append(img)
+            self._preloaded_confocal_data3.append(np.zeros_like(ch3[0]))  # add an empty image at the end, for resetting analysis
+            
         self._widget.setConfocalDataField(confocal_data_file)
 
     def initiatePlottingParams(self):
@@ -440,37 +468,25 @@ class EtMINFLUXControllerSim(QtCore.QObject):
             self.__busy = True
             # get image
             self.imgs = []
-            currimg = self._preloaded_confocal_data.popleft()
-            self._preloaded_confocal_data.append(currimg)
-            if np.sum(currimg) == 0:
+            currimg_ch1 = self._preloaded_confocal_data1.popleft()
+            self._preloaded_confocal_data1.append(currimg_ch1)
+            if self.__count_conf_channels >= 2:
+                # if dual color confocal scan
+                currimg_ch2 = self._preloaded_confocal_data2.popleft()
+                self._preloaded_confocal_data2.append(currimg_ch2)
+            if self.__count_conf_channels == 3:
+                # if triple color confocal scan
+                currimg_ch3 = self._preloaded_confocal_data3.popleft()
+                self._preloaded_confocal_data3.append(currimg_ch3)
+            if np.sum(currimg_ch1) == 0:
                 self.setBusyFalse()
                 self.initiate()
                 return analysisSuccess
-            self.imgs.append(currimg)
-            
-            # TODO: FIX for multiple channels
-            #if self.__count_conf_channels >= 2:
-            #    # if dual color confocal scan - find ch2 in imspector measurement data stacks (same size as ch1)
-            #    ch1_sh = np.shape(self.imgs[0])
-            #    for i in range(stackidx+1,10):
-            #        try:
-            #            img = np.squeeze(meas.stack(i).data()[0])
-            #            if np.shape(img) == ch1_sh:
-            #                self.imgs.append(img)
-            #                ch2_idx = i
-            #                break
-            #        except:
-            #            pass
-            #if self.__count_conf_channels == 3:
-            #    # if triple color confocal scan - find ch3 in imspector measurement data stacks (same size as ch1)
-            #    for i in range(ch2_idx+1,10):
-            #        try:
-            #            img = np.squeeze(meas.stack(i).data()[0])
-            #            if np.shape(img) == ch1_sh:
-            #                self.imgs.append(img)
-            #                break
-            #        except:
-            #            pass
+            self.imgs.append(currimg_ch1)
+            if self.__count_conf_channels >= 2:
+                self.imgs.append(currimg_ch2)
+            if self.__count_conf_channels == 3:
+                self.imgs.append(currimg_ch3)
             
             # if initial settling frames have passed
             coords_detected, roi_sizes = self.runPipeline()
@@ -685,10 +701,11 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.recTimeTimerThread.start()
 
     def startConfPauseTimer(self):
+        print('Start confocal pause timer')
         self.confPauseTimer.setInterval(self.pausetime)
         self.confPauseTimerThread.start()
         # for display countdown timer
-        self.confPauseGUICountdownTimer.setInterval(1)
+        self.confPauseGUICountdownTimer.setInterval(100)
         self.confPauseGUICountdownTimerThread.start()
         self.confIntervalDispTimer.start()
 
@@ -848,10 +865,10 @@ class BinaryMaskHelper():
         self.binary_stack = []
         imgs = []
         for _ in range(self.etMINFLUXController.binary_frames):
-            imgs.append(self.etMINFLUXController._preloaded_confocal_data.popleft())
+            imgs.append(self.etMINFLUXController._preloaded_confocal_data1.popleft())
             self.binary_stack.append(imgs[-1])
         for img in reversed(imgs):
-            self.etMINFLUXController._preloaded_confocal_data.appendleft(img)
+            self.etMINFLUXController._preloaded_confocal_data1.appendleft(img)
         self.calculateBinaryMask()
 
     def resetBinaryMask(self):
