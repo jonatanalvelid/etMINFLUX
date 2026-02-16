@@ -39,17 +39,8 @@
         "top_mfx_dataset_pos": [2157, 1211]
     },
     "acquisition_settings": {
-        "minflux_seqs": ["ja_seqTrk3D_Peroxisomes_HaloJF646-m2410",
-                            "ja_seqTrk3D_Dec2022-m2410base-pex13halojf646test",
-                            "ja_seqTrk3D_Peroxisomes_HaloJF646-m2410",
-                            "Tracking_2D_Fast", 
-                            "ja_seqTrk3D_Dec2022-2Csearch-m2410base",
-                            "ja_seqTrk3D_Dec2022-2Cspawn-m2410base",
-                            "ja_seqTrk3D_Dec2022-m2410base",
-                            "ja_Tracking_2D_Fast_Nov2024-m2410base",
-                            "ja_Tracking_2D_Nov2024-2Csearch-m2410base",
-                            "ja_Tracking_2D_Nov2024-2Cspawn-m2410base",
-                            "ja_Tracking_2D_Nov2024-m2410base"],
+        "minflux_seqs": ["Tracking_2D_Fast", 
+                            "seqTrk3D_Dec2022"],
         "confocal_config": "confocal",
         "minflux_config": "Minflux",
         "minflux_exc_power_def": 4.0,
@@ -75,6 +66,6 @@
         "redetect_dist_thresh_def": 20
     },
     "save_settings": {
-        "save_directory": "C:\\Users\\Abberior_Admin\\Desktop\\Jonatan\\etMINFLUX-data"
+        "save_directory": "C:\\Users\\Abberior_Admin\\Documents\\"
     }
 }
