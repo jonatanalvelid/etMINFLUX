@@ -12,8 +12,7 @@ etMINFLUX has been developed to work with two separate versions of Imspector con
 No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run. Alternatively, the released executable contains the latest (Jan-2026) update of the etMINFLUX code, and can be run without installing a Python environment. The only requirement is to keep the local specpy package file (not included in the executable) in the same folder as the executable for proper loading of this functionality.
 
 The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10 and Imspector v16.3.15645/15635 (m2205) and v16.3.21315 (m2410), and has the following dependencies:
-- specpy (https://pypi.org/project/specpy/, v1.2.3 used during development (works with Python 3.10); v1.2.1 available via pip works with Python 3.6 and has not been tested. See below for more info on specpy version.) Can be omitted if requiring a simulated etMINFLUX environment.
-You can simply import it or use the wheel to install it into your python env.)
+- specpy (v1.2.3 used during development (works with Python 3.10); see below for more info on specpy versions and where to find it. Can be omitted if only requiring a simulated etMINFLUX environment. You can simply import it or use the wheel to install it into your python env.)
 - qtpy (https://pypi.org/project/QtPy/)
 - PyQt5
 - pyqtgraph
@@ -30,12 +29,17 @@ Individual implemented pipelines have among the following dependencies:
 - opencv (https://pypi.org/project/opencv-python/)
 - trackpy (https://pypi.org/project/trackpy/)
 
+## Specpy versions
+The publicly available v1.2.1 (2017; https://pypi.org/project/specpy/) does not work with etMINFLUX, as it does not contain the required functionality for controlling a MINFLUX microscope and acquisitions. The publicly available specpy version is not expected to be updated by abberior. Instead, the later versions of Imspector ships with a complementary specpy version in the installation folders. Always use the specpy version shipped with your specific version of Imspector. The installation wheel file for specpy can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers). 
+
+The continuously shipped specpy versions with newer versions of Imspector shows abberiors commitment to maintain the compatibility, also since latest versions contain updated MINFLUX functionality through specpy, which means that this framework implementation of etMINFLUX will remain functional as long as Imspector is the main control software for abberior MINFLUX microscopes. Should this no longer be the case, the backbone of the etMINFLUX widget will still be possible to upgrade by changing of the specpy calls in the code to any new Python interface that implements similar functionality. 
+
 ## Setup etMINFLUX
 etMINFLUX settings required to be adjusted by the user can all be found in etMINFLUX_setup.json in this repository. The code reads this file, and according to the instructions below uses the field values to adjust the etMINFLUX widget to the local MINFLUX setup. If a simulation version of etMINFLUX is requested, adjust the system_simulation parameter in etMINFLUX_setup.json. In this way, etMINFLUX can be run without access to a local specpy and MINFLUX microscope, and allows testing of analysis pipelines by loading pre-recorded confocal timelapse data in tiff stacks. See below for further information about this mode.
 
 To setup the python environment needed to run the etMINFLUX software from a repository cope, follow the following instructions. If using the executable, simply run the executable.
 - Install a virtual environment using the provided etminflux.yml or requirements.txt files in this repository. Conda has been used during development and was used to export these files.
-- Additionally, in the new environment, install specpy v1.2.3 (or any matched specpy version for your version of Imspector, where >1.2.3 should work). An installation wheel file can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers). Copy the wheel file to your cloned repository, change folder to your repository in the command line, and install it using pip: pip install specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers).
+- Additionally, in the new environment, install specpy v1.2.3 (or any matched specpy version >1.2.3 for your version of Imspector). An installation wheel file can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers). Copy the wheel file to your cloned repository, change folder to your repository in the command line, and install it using pip: pip install specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers).
 - If a simulation version of etMINFLUX is requested (also for executable), adjust the system_simulation parameter in etMINFLUX_setup.json (true = simulated, false = MINFLUX microscope and specpy required).
 - Total installation time on a MINFLUX control computer should be on the order of a few minutes.
   
