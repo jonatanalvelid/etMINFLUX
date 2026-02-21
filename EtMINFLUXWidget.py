@@ -732,6 +732,8 @@ class CoordTransformWidget(QtWidgets.QWidget):
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
 
+        self.setWindowTitle('Misc. settings')
+
         # create buttons
         self.setDeleteMFXDatasetButton = PushButton('Top MFX dataset')
         self.setSaveDirButton = PushButton('Choose save directory')
@@ -819,6 +821,8 @@ class BinaryMaskWidget(QtWidgets.QWidget):
 
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
+
+        self.setWindowTitle('Binary mask generation')
 
         # create title
         self.binary_title = TitleLabel('Binary mask')

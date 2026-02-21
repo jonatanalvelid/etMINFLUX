@@ -1,9 +1,0 @@
-This is the guide text.
-It will be shown in the box.
-Hello world, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing, testing.
-How is this viewed.
-
-How is this viewed.
-How is.
-
-How is.

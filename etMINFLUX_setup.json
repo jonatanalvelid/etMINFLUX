@@ -1,5 +1,5 @@
 {
-    "system_name": "TestSetup",
+    "system_name": "DefaultSetup",
     "system_simulation": true,
     "hardware_settings": {
         "mfx_exc_lasers": ["MINFLUX640",
@@ -36,12 +36,13 @@
         "sleep_time_save": 3.0
     },
     "gui_settings": {
-        "top_mfx_dataset_pos": [2157, 1211]
+        "top_mfx_dataset_pos": [500, 500]
     },
     "acquisition_settings": {
         "minflux_seqs": ["Tracking_2D_Fast", 
                             "seqTrk3D_Dec2022"],
         "confocal_config": "confocal",
+        "confocal_stack_idx": 0,
         "minflux_config": "Minflux",
         "minflux_exc_power_def": 4.0,
         "minflux_exc_power_th1_def": 0.04,
@@ -63,7 +64,9 @@
     },
     "roi_following_settings": {
         "confocal_interval_def": 60,
-        "redetect_dist_thresh_def": 20
+        "redetect_dist_thresh_def": 20,
+        "multidetect_event_det_wind": 5,
+        "multidetect_events_to_start": 3
     },
     "save_settings": {
         "save_directory": "C:\\Users\\Abberior_Admin\\Documents\\"
