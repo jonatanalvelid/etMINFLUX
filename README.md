@@ -11,14 +11,14 @@ etMINFLUX has been developed to work with two separate versions of Imspector con
 ## Installation instructions
 No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run (recommended way). Alternatively, the released executable contains the latest (Feb-2026) update of the etMINFLUX code, and can be run without installing a Python environment. The only requirement is to keep the local specpy package folder (not included in the executable, can be found in your local Imspector installation folder: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy) named specpy in the same folder as the executable for proper loading of this functionality (includes specpy and related required DLLs.
 
-The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10 and Imspector v16.3.15645/15635 (m2205) and v16.3.21315 (m2410), and has the dependencies in the list below. It is recommended to use a conda environment, and install everything from conda-forge (everything available except mouse and opencv) to avoid issues with specpy DLL loadings. 
-- specpy (v1.2.3 used during development (works with Python 3.10); see below for more info on specpy versions and where to find it. Can be omitted if only requiring a simulated etMINFLUX environment. You can simply import it or use the wheel to install it into your python env.)
+The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10.4 and Imspector v16.3.15645/15635 (m2205) and v16.3.21315 (m2410), and has the dependencies in the list below. It is recommended to use a conda environment, and install everything from conda-forge (everything available except mouse and opencv) to avoid issues with specpy DLL loadings. 
+- specpy (v1.2.3 used during development (works with Python 3.10.4); see below for more info on specpy versions and where to find it. Can be omitted if only requiring a simulated etMINFLUX environment. You can simply import it or use the wheel to install it into your python env.)
 - qtpy
-- PyQt5
+- pyqt (required =5)
 - pyqtgraph
 - matplotlib
 - tifffile
-- numpy (<v2)
+- numpy (<v2 for specpy, recommended =1.25)
 - scipy
 - pynput
 - mouse (only available from pip: https://pypi.org/project/mouse/)
