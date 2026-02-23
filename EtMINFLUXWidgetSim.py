@@ -16,10 +16,12 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
     """ View part of the View-Controller-based etMINFLUX smart microscopy software. A GUI for interacting with the Controller, 
     with parameter fields to tweak acquisition settings, confocal and MINFLUX, analysis pipeline settings, and various calibration options. """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, paths, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         print('Initializing etMINFLUX widget, simulation mode')
+
+        self.paths = paths
 
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
@@ -373,19 +375,11 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         """ Set combobox with available analysis pipelines to use. """
         for pipeline in os.listdir(analysisDir):
             if os.path.isfile(os.path.join(analysisDir, pipeline)):
-                pipeline = pipeline.split('.')[0]
-                self.analysisPipelines.append(pipeline)
+                if '__init__' not in pipeline:
+                    pipeline = pipeline.split('.')[0]
+                    self.analysisPipelines.append(pipeline)
         self.analysisPipelinePar.addItems(self.analysisPipelines)
         self.analysisPipelinePar.setCurrentIndex(0)
-
-    def setTransformations(self, transformDir):
-        """ Set combobox with available coordinate transformations to use. """
-        for transform in os.listdir(transformDir):
-            if os.path.isfile(os.path.join(transformDir, transform)):
-                transform = transform.split('.')[0]
-                self.transformPipelines.append(transform)
-        self.transformPipelinePar.addItems(self.transformPipelines)
-        self.transformPipelinePar.setCurrentIndex(0)
 
     def setMfxSequenceList(self, mfxSeqs, thread=0):
         """ Set combobox with available minflux sequences to use. """

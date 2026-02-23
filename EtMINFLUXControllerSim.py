@@ -15,6 +15,7 @@ import pyqtgraph as pg
 
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from inspect import signature
 from qtpy import QtCore
 from PyQt5 import QtWidgets
@@ -31,14 +32,16 @@ class EtMINFLUXControllerSim(QtCore.QObject):
 
     helpPlotDetectedCoordsSignal = QtCore.Signal(object, object)
 
-    def __init__(self, widget,  *args, **kwargs):
+    def __init__(self, widget,  paths, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._widget = widget
         
         print('Initializing etMINFLUX controller, simulation mode')
-        
+
+        self.paths = paths
+
         # SYSTEM-SPECIFIC SETTINGS - MAKE SURE TO CHANGE THESE VARIABLES IN THE SETUP JSON TO YOUR SPECIFIC SYSTEM CONFIG
-        self.setupInfo = self.loadSetupJson(filepath='etMINFLUX_setup.json')
+        self.setupInfo = self.loadSetupJson()
         # default data dir
         self._dataDir = self.setupInfo.get('save_settings').get('save_directory')
         # list of available detectors for MFX imaging
@@ -54,17 +57,16 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self._widget.coordTransformWidget.setSaveFolderField(self._dataDir)
 
         # folders for analysis pipelines and transformations
-        self.analysisDir = os.path.join('analysis_pipelines')
-        if not os.path.exists(self.analysisDir):
-            os.makedirs(self.analysisDir)
+        self.analysisDir = self.paths["analysis_dir"]
+        #if not os.path.exists(self.analysisDir):
+        #    os.makedirs(self.analysisDir)
         sys.path.append(self.analysisDir)
-        self.transformDir = os.path.join('transform_pipelines')
-        if not os.path.exists(self.transformDir):
-            os.makedirs(self.transformDir)
+        self.transformDir = self.paths["transform_dir"]
+        #if not os.path.exists(self.transformDir):
+        #    os.makedirs(self.transformDir)
         sys.path.append(self.transformDir)
         # set lists of analysis pipelines and transformations in the widget
         self._widget.setAnalysisPipelines(self.analysisDir)
-        self._widget.setTransformations(self.transformDir)
 
         # set list of available MFX sequences in the widget
         self._widget.setMfxSequenceList(self.setupInfo.get('acquisition_settings').get('minflux_seqs'), thread=0)
@@ -158,7 +160,7 @@ class EtMINFLUXControllerSim(QtCore.QObject):
 
     def openGuide(self):
         # load text from markdown file
-        guidetext_url = QtCore.QUrl.fromLocalFile("guidetext.md")
+        guidetext_url = QtCore.QUrl.fromLocalFile(str(self.paths['guidetext']))
         # show text in subwidget
         self._widget.guideWidget.setText(source=guidetext_url)
         # open subwidget
@@ -351,7 +353,7 @@ class EtMINFLUXControllerSim(QtCore.QObject):
     def loadPipeline(self):
         """ Load the selected analysis pipeline, and its parameters into the GUI. """
         pipelinename = self.getPipelineName()
-        self.pipeline = getattr(importlib.import_module(f'{pipelinename}'), f'{pipelinename}')
+        self.pipeline = getattr(importlib.import_module(f'analysis_pipelines.{pipelinename}'), pipelinename)
         self.__pipeline_params = signature(self.pipeline).parameters
         # get parameter for how many confocal channels the loaded pipeline uses
         self.__count_conf_channels = len([channel for channel in self.__pipeline_params.keys() if 'img_ch' in channel])
@@ -745,11 +747,21 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         return roi_sizes
 
     def loadSetupJson(self, filepath=None):
-        """ Load a setup from a json file. """
-        filepath = QtWidgets.QFileDialog.getOpenFileName(caption='Load etMINFLUX setup info', filter='JSON files (*.json)')[0]
-        with open(filepath, 'r') as f:
-            setup_dict = json.load(f)
-        return setup_dict
+        """
+        Load setup JSON from the user config directory (Documents\\etMINFLUX\\config_files).
+        If filepath is given and is absolute, use it.
+        If filepath is given and is relative, treat it as relative to config_dir.
+        """
+        cfg_dir: Path = self.paths["config_dir"]
+
+        if filepath is None:
+            path = cfg_dir / "etMINFLUX_setup.json"
+        else:
+            p = Path(filepath)
+            path = p if p.is_absolute() else (cfg_dir / p)
+
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
 
 class AnalysisImgHelper():

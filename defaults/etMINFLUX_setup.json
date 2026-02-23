@@ -1,6 +1,6 @@
 {
     "system_name": "DefaultSetup",
-    "system_simulation": true,
+    "system_simulation": false,
     "hardware_settings": {
         "mfx_exc_lasers": ["MINFLUX640",
                             "MINFLUX560"],
@@ -21,7 +21,7 @@
                                     "[\"DET4\",\"DET5\"]",
                                     "[\"DET3\",\"DET4\"]",
                                     "[\"DET3\",\"DET5\"]"],
-        "mfx_detectors_impsector_threads": ["[\"DET1\"]",
+        "mfx_detectors_imspector_threads": ["[\"DET1\"]",
                                             "[\"DET2\"]",
                                             "[\"DET3\"]",
                                             "[\"DET4\"]",

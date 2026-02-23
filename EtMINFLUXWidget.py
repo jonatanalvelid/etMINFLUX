@@ -16,10 +16,12 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
     """ View part of the View-Controller-based etMINFLUX smart microscopy software. A GUI for interacting with the Controller, 
     with parameter fields to tweak acquisition settings, confocal and MINFLUX, analysis pipeline settings, and various calibration options. """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, paths, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         print('Initializing etMINFLUX widget')
+
+        self.paths = paths
 
         # set graphic style of widget
         self.setStyleSheet('background-color: rgb(70,70,70);')
@@ -362,8 +364,9 @@ class EtMINFLUXWidget(QtWidgets.QWidget):
         """ Set combobox with available analysis pipelines to use. """
         for pipeline in os.listdir(analysisDir):
             if os.path.isfile(os.path.join(analysisDir, pipeline)):
-                pipeline = pipeline.split('.')[0]
-                self.analysisPipelines.append(pipeline)
+                if '__init__' not in pipeline:
+                    pipeline = pipeline.split('.')[0]
+                    self.analysisPipelines.append(pipeline)
         self.analysisPipelinePar.addItems(self.analysisPipelines)
         self.analysisPipelinePar.setCurrentIndex(0)
 
@@ -558,7 +561,7 @@ class IntensityGraphWidget(QtWidgets.QWidget):
         self.setLayout(self.grid)
         self.grid.addWidget(self.canvas)
 
-        self.reset()
+        #self.reset()
         
     def update_plot(self, event_frame, intensity_trace):
         self.ax.clear()
