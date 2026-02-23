@@ -9,25 +9,25 @@ Event-triggered MINFLUX controller, written to interact with the abberior Imspec
 etMINFLUX has been developed to work with two separate versions of Imspector controlling a MINFLUX microscope. The main branch in the repository, and the released executables, work with Imspector version m2410 (v16.3.21315), as released by abberior Instruments in 2025. If your MINFLUX microscope runs an older version of Imspector, the branch m2205 contains a version of the etMINFLUX code that was originally developed for that Imspector version. Note that this version requires simulated mouse and keyboard controls, due to those specpy and Imspector versions lacking later-added functionality, and thus requires the user to not adjust the Imspector measurement and widget windows during measurements, and always keeping Imspector as the active window.
 
 ## Installation instructions
-No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run. Alternatively, the released executable contains the latest (Jan-2026) update of the etMINFLUX code, and can be run without installing a Python environment. The only requirement is to keep the local specpy package file (not included in the executable) in the same folder as the executable for proper loading of this functionality.
+No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run (recommended way). Alternatively, the released executable contains the latest (Feb-2026) update of the etMINFLUX code, and can be run without installing a Python environment. The only requirement is to keep the local specpy package folder (not included in the executable, can be found in your local Imspector installation folder: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy) named specpy in the same folder as the executable for proper loading of this functionality (includes specpy and related required DLLs.
 
-The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10 and Imspector v16.3.15645/15635 (m2205) and v16.3.21315 (m2410), and has the following dependencies:
+The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10 and Imspector v16.3.15645/15635 (m2205) and v16.3.21315 (m2410), and has the dependencies in the list below. It is recommended to use a conda environment, and install everything from conda-forge (everything available except mouse and opencv) to avoid issues with specpy DLL loadings. 
 - specpy (v1.2.3 used during development (works with Python 3.10); see below for more info on specpy versions and where to find it. Can be omitted if only requiring a simulated etMINFLUX environment. You can simply import it or use the wheel to install it into your python env.)
-- qtpy (https://pypi.org/project/QtPy/)
+- qtpy
 - PyQt5
 - pyqtgraph
 - matplotlib
 - tifffile
-- numpy
+- numpy (<v2)
 - scipy
-- pynput (https://pypi.org/project/pynput/)
-- mouse (https://pypi.org/project/mouse/)
+- pynput
+- mouse (only available from pip: https://pypi.org/project/mouse/)
 
 Individual implemented pipelines have among the following dependencies:
 - pandas
-- scikit-image
-- opencv (https://pypi.org/project/opencv-python/)
-- trackpy (https://pypi.org/project/trackpy/)
+- skimage
+- opencv (only available from pip, use opencv-python-headless: https://pypi.org/project/opencv-python-headless/)
+- trackpy
 
 ## Specpy versions
 The publicly available v1.2.1 (2017; https://pypi.org/project/specpy/) does not work with etMINFLUX, as it does not contain the required functionality for controlling a MINFLUX microscope and acquisitions. The publicly available specpy version is not expected to be updated by abberior. Instead, the later versions of Imspector ships with a complementary specpy version in the installation folders. Always use the specpy version shipped with your specific version of Imspector. The installation wheel file for specpy can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers). 
@@ -35,11 +35,15 @@ The publicly available v1.2.1 (2017; https://pypi.org/project/specpy/) does not 
 The continuously shipped specpy versions with newer versions of Imspector shows abberiors commitment to maintain the compatibility, also since latest versions contain updated MINFLUX functionality through specpy, which means that this framework implementation of etMINFLUX will remain functional as long as Imspector is the main control software for abberior MINFLUX microscopes. Should this no longer be the case, the backbone of the etMINFLUX widget will still be possible to upgrade by changing of the specpy calls in the code to any new Python interface that implements similar functionality. 
 
 ## Setup etMINFLUX
-etMINFLUX settings required to be adjusted by the user can all be found in etMINFLUX_setup.json in this repository. The code reads this file, and according to the instructions below uses the field values to adjust the etMINFLUX widget to the local MINFLUX setup. If a simulation version of etMINFLUX is requested, adjust the system_simulation parameter in etMINFLUX_setup.json. In this way, etMINFLUX can be run without access to a local specpy and MINFLUX microscope, and allows testing of analysis pipelines by loading pre-recorded confocal timelapse data in tiff stacks. See below for further information about this mode.
+Upon launching etMINFLUX for the first time, a .../Documents folder will be created, called etMINFLUX. This contains the subfolders config_files, analysis_pipelines, and transform_pipelines, with files used by the program.
 
-To setup the python environment needed to run the etMINFLUX software from a repository cope, follow the following instructions. If using the executable, simply run the executable.
-- Install a virtual environment using the provided etminflux.yml or requirements.txt files in this repository. Conda has been used during development and was used to export these files.
-- Additionally, in the new environment, install specpy v1.2.3 (or any matched specpy version >1.2.3 for your version of Imspector). An installation wheel file can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers). Copy the wheel file to your cloned repository, change folder to your repository in the command line, and install it using pip: pip install specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers).
+If you run the executable, note that it may take ~20-30 s for it to start.
+
+etMINFLUX settings required to be adjusted by the user can all be found in .../Documents/etMINFLUX/config_files/etMINFLUX_setup.json. The code reads this file, and according to the instructions below uses the field values to adjust the etMINFLUX widget to the local MINFLUX setup. If a simulation version of etMINFLUX is requested, adjust the system_simulation parameter in etMINFLUX_setup.json. In this way, etMINFLUX can be run without access to a local specpy and MINFLUX microscope, and allows testing of analysis pipelines by loading pre-recorded confocal timelapse data in tiff stacks. See below for further information about this mode.
+
+To setup the python environment needed to run the etMINFLUX software as a script (running __ main __.py), follow the following instructions. If using the executable, simply run the executable from a folder in which you also have specpy in a folder called specpy.
+- Install a virtual environment using the provided etminflux.yml file in this repository. Conda has been used during development and was used to export these files, as such a conda environment is recommended.
+- Additionally, in the new environment, either install specpy v1.2.3 (or any matched specpy version >1.2.3 for your version of Imspector) or keep a folder with specpy in the repository folder (running as script) or in the same folder as the .exe (running as executable). An installation wheel file can be found in the local Imspector folder upon installation of Imspector: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers), where also the folder can be found in case that method is preferred: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy. Copy the wheel file to your cloned repository, change folder to your repository in the command line, and install it using pip: pip install specpy-x.x.x-cpxxx-cpxxx-win_amd64.whl (x replaces version numbers).
 - If a simulation version of etMINFLUX is requested (also for executable), adjust the system_simulation parameter in etMINFLUX_setup.json (true = simulated, false = MINFLUX microscope and specpy required).
 - Total installation time on a MINFLUX control computer should be on the order of a few minutes.
   
@@ -121,11 +125,11 @@ Other types of analysis pipelines might be adjusted in similar ways, or using of
 EtMINFLUX version m2410 (main branch) implements a new running mode - simulation mode. Through this mode, launched if no specpy connection can be made, the user can gain familiarity to the GUI even in an office setting without access to a MINFLUX microscope. This running mode can also, most importantly, be used to implement, test, and optimize real-time analysis pipelines. Pre-recorded confocal timelapses can be loaded in the GUI, and then, by running etMINFLUX in visualization mode, according to what is described above, the analysis pipeline choosen will run on the loaded dataset as if it was on a microscope. It will stop when the pre-loaded timelapse finishes. Analysis pipeline parameters can then be optimized to real microscope data without access to a microscope, to prepare for real experiments in a laboratory setting, optimizing the whole experimental pipeline. Pre-recorded confocal timelapses can be single, dual, or triple color datasets, and all pipelines supported in a real experimental setting are supported in the simulation mode. Make sure that pre-loaded confocal datasets are in tif format. In order to pre-load confocal multicolor datasets, make sure that the tif files loaded have been saved as ImageJ hyperstacks with the correct dimensionality in terms of channels (colors) and time. 
 
 ## Implement new real-time analysis pipelines
-The analysis pipelines provided here are a set of pipelines that were developed during the development of the etMINFLUX method. New experiment-specific pipelines can easily be implemented and added as alternatives by following the following instructions, and by looking at the pipeline_template.py provided in the analysis_pipelines folder with additional instructions.
+The analysis pipelines provided here are a set of pipelines that were developed during the development of the etMINFLUX method. New experiment-specific pipelines can easily be implemented and added as alternatives by following the following instructions, and by looking at the pipeline_template.py provided in the defaults/analysis_pipelines (or .../Documents/etMINFLUX/analysis_pipelines upon running etMINFLUX for the first time as decribed above) folder with additional instructions.
 - Start from the pipeline_template.py file. Copy the file, rename the function and rename the file to the same name. (function in function.py)
-- Place the file in the analysis_pipelines folder, after it will automatically show up in the etMINFLUX widget.
+- Place the file in the .../Documents/etMINFLUX/analysis_pipelines folder, after it will automatically show up in the etMINFLUX widget (restart needed).
 - Add any number of additional variables specific to that pipeline, all with numerical values, to the default variables that should not be removed (img, prev_frames, binary_mask, exinfo, presetROIsize). The additional variables will show up in the GUI when loading that analysis pipeline.
-- Use any python package, and develop your analysis pipeline in the function.
+- Use any python package, and develop your analysis pipeline in the function. If you require different python modules than in the default pipelines, install them in the environment in which you run etMINFLUX. 
 - Follow the return signature as in pipeline_template. Return any detected event coordinates in the form of a numpy array of lists of (x,y) event coordinate pairs. Even with only one detected event, the structure has to be the same, i.e.: np.array([[x1,y1]]).
 
 ## Publications
