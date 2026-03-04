@@ -140,9 +140,9 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         self.__confocalFramePause = False
         self.__count_conf_channels = 1
         self.__img_ana = None
-        self._preloaded_confocal_data_ch1 = deque()
-        self._preloaded_confocal_data_ch2 = deque()
-        self._preloaded_confocal_data_ch3 = deque()
+        self._preloaded_confocal_data1 = deque()
+        self._preloaded_confocal_data2 = deque()
+        self._preloaded_confocal_data3 = deque()
         self.__prev_event_coords_deque = deque(maxlen=100)
         self.__prevFrames = deque(maxlen=50)  # deque for previous fast frames
         self.__prevAnaFrames = deque(maxlen=50)  # deque for previous preprocessed analysis frames
@@ -215,39 +215,43 @@ class EtMINFLUXControllerSim(QtCore.QObject):
     def initiate(self):
         """ Initiate or stop an etMINFLUX experiment. """
         if not self.__running:
-            # read param for triggering random ROI from binary masks
-            self.__random_roi_bin = self._widget.triggerRandomROICheck.isChecked()
-            # read params for analysis pipeline from GUI
-            self.__pipeline_param_vals = self.readPipelineParams()
-            # reset general run parameters
-            self.resetRunParams()
-            self.clearConfocalData()
-            # Reset parameter for extra information that pipelines can input and output
-            self.__exinfo = None
+            # check that data has been preloaded, i.e. deque is not empty
+            if self._preloaded_confocal_data1:
+                # read param for triggering random ROI from binary masks
+                self.__random_roi_bin = self._widget.triggerRandomROICheck.isChecked()
+                # read params for analysis pipeline from GUI
+                self.__pipeline_param_vals = self.readPipelineParams()
+                # reset general run parameters
+                self.resetRunParams()
+                self.clearConfocalData()
+                # Reset parameter for extra information that pipelines can input and output
+                self.__exinfo = None
 
-            # launch help widget, if visualization mode or validation mode
-            # Check if visualization mode, in case launch help widget
-            experimentModeIdx = self._widget.experimentModesPar.currentIndex()
-            experimentMode = self._widget.experimentModes[experimentModeIdx]
-            if experimentMode == 'TestVisualize':
-                self.__runMode = RunMode.TestVisualize
-            elif experimentMode == 'TestValidate':
-                self.__runMode = RunMode.TestValidate
+                # launch help widget, if visualization mode or validation mode
+                # Check if visualization mode, in case launch help widget
+                experimentModeIdx = self._widget.experimentModesPar.currentIndex()
+                experimentMode = self._widget.experimentModes[experimentModeIdx]
+                if experimentMode == 'TestVisualize':
+                    self.__runMode = RunMode.TestVisualize
+                elif experimentMode == 'TestValidate':
+                    self.__runMode = RunMode.TestValidate
+                else:
+                    self.__runMode = RunMode.Experiment
+                # check if visualization or validation mode
+                if self.__runMode == RunMode.TestValidate or self.__runMode == RunMode.TestVisualize or self.__plotROI:
+                    self.launchHelpWidget()
+                self.resetEventViewWidget()
+                if self.__runMode == RunMode.Experiment:
+                    self.launchEventViewWidget()
+                # read confocal frame time
+                self.confocalFrameTime = int(float(self._widget.preload_confocal_frametime_edit.text()) * 1000) # time in ms
+                self.pausetime = self.confocalFrameTime
+                # start confocal imaging loop
+                self.__running = True
+                self.startConfocalScanning()
+                self._widget.initiateButton.setText('Stop')
             else:
-                self.__runMode = RunMode.Experiment
-            # check if visualization or validation mode
-            if self.__runMode == RunMode.TestValidate or self.__runMode == RunMode.TestVisualize or self.__plotROI:
-                self.launchHelpWidget()
-            self.resetEventViewWidget()
-            if self.__runMode == RunMode.Experiment:
-                self.launchEventViewWidget()
-            # read confocal frame time
-            self.confocalFrameTime = int(float(self._widget.preload_confocal_frametime_edit.text()) * 1000) # time in ms
-            self.pausetime = self.confocalFrameTime
-            # start confocal imaging loop
-            self.__running = True
-            self.startConfocalScanning()
-            self._widget.initiateButton.setText('Stop')
+                print('No confocal data loaded. Select a tiff stack and load before running again.')
         else:
             # save log and confocal data
             filename_prefix = datetime.now().strftime('%y%m%d-%H%M%S')
@@ -564,6 +568,8 @@ class EtMINFLUXControllerSim(QtCore.QObject):
         # if we have some detected or randomized coords
         if coords_detected.size != 0:
             self.helpPlotDetectedCoordsSignal.emit(coords_detected, roi_sizes)
+            print('Event(s) detected at:')
+            print(coords_detected)
 
     def plotDetectedCoords(self, coords_detected, roi_sizes):
         """ Plot detected coordinates in the help widget, and add them to the coords list in the help widget. """
