@@ -163,7 +163,7 @@ class EtMINFLUXWidgetSim(QtWidgets.QWidget):
         self.follow_roi_redetectthresh_edit = LineEdit(str(0))
         # create editable fields for pre-recorded confocal loading
         self.preload_confocal_frametime_label = FieldLabel('Confocal frame time (s)')
-        self.preload_confocal_frametime_edit = LineEdit(str(0))
+        self.preload_confocal_frametime_edit = LineEdit(str(2))
         # create GUI group titles
         self.misc_title = TitleLabel('Transform, calibration, saving, guide, binary mask')
         self.minflux_title = TitleLabel('MINFLUX imaging parameters')
