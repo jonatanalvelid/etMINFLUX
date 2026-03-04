@@ -1,7 +1,3 @@
-from EtMINFLUXController import EtMINFLUXController
-from EtMINFLUXWidget import EtMINFLUXWidget
-from EtMINFLUXControllerSim import EtMINFLUXControllerSim
-from EtMINFLUXWidgetSim import EtMINFLUXWidgetSim
 from qtpy import QtWidgets
 import sys
 import os
@@ -30,14 +26,16 @@ if __name__ == "__main__":
             simulation_mode = False
         except:
             simulation_mode = True
-            print('Imspector not loaded. Continuing in simulation mode.')
+            print('specpy not loaded or Imspector connection to reached. Continuing in simulation mode.')
 
     if simulation_mode:
-        widget = EtMINFLUXWidgetSim(paths=paths)
-        controller = EtMINFLUXControllerSim(widget, paths=paths)
+        from EtMINFLUXControllerSim import EtMINFLUXControllerSim as Controller
+        from EtMINFLUXWidgetSim import EtMINFLUXWidgetSim as Widget
     else:
-        widget = EtMINFLUXWidget(paths=paths)
-        controller = EtMINFLUXController(widget, paths=paths)
+        from EtMINFLUXController import EtMINFLUXController as Controller
+        from EtMINFLUXWidget import EtMINFLUXWidget as Widget
+    widget = Widget(paths=paths)
+    controller = Controller(widget, paths=paths)
 
     widget.show()
     sys.exit(etMINFLUXapp.exec_())

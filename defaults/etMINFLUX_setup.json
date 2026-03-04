@@ -1,6 +1,6 @@
 {
     "system_name": "DefaultSetup",
-    "system_simulation": false,
+    "system_simulation": true,
     "hardware_settings": {
         "mfx_exc_lasers": ["MINFLUX640",
                             "MINFLUX560"],
