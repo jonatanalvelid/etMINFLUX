@@ -9,7 +9,7 @@ Event-triggered MINFLUX controller, written to interact with the abberior Imspec
 etMINFLUX has been developed to work with two separate versions of Imspector controlling a MINFLUX microscope. The main branch in the repository, and the released executables, work with Imspector version m2410 (v16.3.21315), as released by abberior Instruments in 2025. If your MINFLUX microscope runs an older version of Imspector, the branch m2205 contains a version of the etMINFLUX code that was originally developed for that Imspector version. Note that this version requires simulated mouse and keyboard controls, due to those specpy and Imspector versions lacking later-added functionality, and thus requires the user to not adjust the Imspector measurement and widget windows during measurements, and always keeping Imspector as the active window.
 
 ## Installation instructions
-No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run (recommended way). Alternatively, the released executable contains the latest (Feb-2026) update of the etMINFLUX code, and can be run without installing a Python environment. The only requirement is to keep the local specpy package folder (not included in the executable, can be found in your local Imspector installation folder: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy) named specpy in the same folder as the executable for proper loading of this functionality (includes specpy and related required DLLs.
+No installation of the codebase is required; the repository can be cloned/downloaded/copied, and in order to run the widget \_\_main\_\_.py should be run (recommended way). Alternatively, the released executable contains the latest (Mar-2026) update of the etMINFLUX code, and can be run without installing a Python environment. The only requirement is to keep the local specpy package folder (not included in the executable, can be found in your local Imspector installation folder: C:\Imspector\Versions\16.3.xxxx-wxxx-win64-MINFLUX\python\specpy\Python3.xx.x-NumPy1.x.x\specpy) named specpy in the same folder as the executable for proper loading of this functionality (includes specpy and related required DLLs.
 
 The code requires a Python environment (such as a conda environment), has been developed and tested with Python v3.10.4 and Imspector v16.3.15645/15635 (m2205) and v16.3.21315 (m2410), and has the dependencies in the list below. It is recommended to use a conda environment, and install everything from conda-forge (everything available except mouse and opencv) to avoid issues with specpy DLL loadings. 
 - specpy (v1.2.3 used during development (works with Python 3.10.4); see below for more info on specpy versions and where to find it. Can be omitted if only requiring a simulated etMINFLUX environment. You can simply import it or use the wheel to install it into your python env.)
@@ -21,12 +21,12 @@ The code requires a Python environment (such as a conda environment), has been d
 - numpy (<v2 for specpy, recommended =1.25)
 - scipy
 - pynput
-- mouse (only available from pip: https://pypi.org/project/mouse/)
+- mouse (only available from pip: https://pypi.org/project/mouse/, install with --no-deps)
 
 Individual implemented pipelines have among the following dependencies:
 - pandas
 - skimage
-- opencv (only available from pip, use opencv-python-headless: https://pypi.org/project/opencv-python-headless/)
+- opencv (only available from pip, use opencv-python-headless: https://pypi.org/project/opencv-python-headless/, install with --no-deps)
 - trackpy
 
 ## Specpy versions

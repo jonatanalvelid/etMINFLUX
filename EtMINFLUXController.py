@@ -1,26 +1,5 @@
-import os, sys
-
-def app_dir() -> str:
-    return os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
-
-APP_DIR = app_dir()
-SPECPY_DIR = os.path.join(APP_DIR, "specpy")
-
-USE_EXTERNAL_SPECPY = os.path.isdir(SPECPY_DIR)
-
-if USE_EXTERNAL_SPECPY:
-    # external-folder mode: import specpy from APP_DIR\specpy
-    if APP_DIR not in sys.path:
-        sys.path.insert(0, APP_DIR)
-
-    os.add_dll_directory(SPECPY_DIR)
-    os.environ["PATH"] = SPECPY_DIR + os.pathsep + os.environ.get("PATH", "")
-    print(f"Using external specpy from {SPECPY_DIR}")
-else:
-    # env-installed mode: do nothing special, rely on normal import resolution
-    print("Using specpy from environment (no external folder found)")
-    pass
-
+import os
+import sys
 import glob
 import importlib
 import enum
@@ -1455,6 +1434,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.recTimeTimerThread.start()
 
     def startConfPauseTimer(self):
+        print('Start confocal pause timer')
         self.confPauseTimer.setInterval(self.pausetime)
         self.confPauseTimerThread.start()
         # for display countdown timer
