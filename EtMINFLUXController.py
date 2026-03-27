@@ -185,6 +185,7 @@ class EtMINFLUXController(QtCore.QObject):
         self.__plotROI = False
         self.__confocalFramePause = False
         self.__count_conf_channels = 1
+        self.__follow_roi_confocal_interval = 1
         self.__mfx_twothreaded = False
         self.__multipleDetectionMFXInitiation = False
         self.__followingROIMultipleDetectMINFLUXPhase = False
